@@ -70,7 +70,7 @@ const Dashboard = () => {
             <div className="mt-2 w-full h-1 bg-slate-100 rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
-                animate={{ width: card.progress.replace('w-', '') }}
+                animate={{ width: card.progress === 'w-full' ? '100%' : card.progress === 'w-3/4' ? '75%' : card.progress === 'w-1/2' ? '50%' : card.progress === 'w-2/3' ? '66%' : card.progress === 'w-4/5' ? '80%' : '100%' }}
                 className={cn("h-full", card.color)} 
               />
             </div>

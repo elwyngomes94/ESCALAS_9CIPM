@@ -361,7 +361,7 @@ const CreateEscala = () => {
                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                  {volunteers
                    .filter(v => {
-                     const mS = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.matricula.includes(searchTerm);
+                     const mS = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || (v.policeman?.matricula || '').includes(searchTerm);
                      const mD = !showOnlyDrivers || v.policeman?.isMotorista;
                      return mS && mD;
                    })
@@ -385,10 +385,10 @@ const CreateEscala = () => {
                       <div className="flex-1 min-w-0">
                          <div className="flex items-center gap-1.5 leading-none mb-0.5">
                             <p className="text-[12px] font-black text-slate-800 truncate">{v.policeman?.nomeGuerra}</p>
-                            {volunteers.indexOf(v) === 0 && <Crown className="w-2.5 h-2.5 text-amber-500" title="Possível Comandante" />}
-                            {v.policeman?.isMotorista && <Car className="w-2.5 h-2.5 text-purple-500" title="Motorista do Quadro" />}
+                            {volunteers.indexOf(v) === 0 && <span title="Possível Comandante"><Crown className="w-2.5 h-2.5 text-amber-500" /></span>}
+                            {v.policeman?.isMotorista && <span title="Motorista do Quadro"><Car className="w-2.5 h-2.5 text-purple-500" /></span>}
                          </div>
-                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{v.policeman?.graduacaoPosto} | PM {v.matricula}</p>
+                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{v.policeman?.graduacaoPosto} | PM {v.policeman?.matricula}</p>
                       </div>
                    </div>
                  ))}
