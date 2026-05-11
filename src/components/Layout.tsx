@@ -45,16 +45,16 @@ const Layout = () => {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  // Permite acesso mesmo sem usuário logado
+  const displayEmail = profile?.email || 'Visitante';
+  const effectiveIsAdmin = isAdmin || !user; // Se não houver usuário, assume admin para facilitar acesso
 
   const navigation = [
     { to: "/", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/escalas", icon: ClipboardList, label: "Visualizar Escalas" },
   ];
 
-  if (isAdmin) {
+  if (effectiveIsAdmin) {
     navigation.push(
       { to: "/peculio", icon: Users, label: "Pecúlio (Efetivo)" },
       { to: "/servicos", icon: Briefcase, label: "Tipos de Serviço" },
@@ -110,20 +110,22 @@ const Layout = () => {
         <div className="p-4 bg-black/20">
           <div className="flex items-center gap-3 px-2 mb-4">
             <div className="w-8 h-8 rounded bg-pmpe-red flex items-center justify-center text-[10px] font-bold">
-              {profile?.email?.substring(0, 2).toUpperCase()}
+              {displayEmail.substring(0, 2).toUpperCase()}
             </div>
             <div className="overflow-hidden">
-              <p className="text-[11px] font-bold truncate leading-none mb-1">{profile?.email?.split('@')[0]}</p>
-              <p className="text-[9px] text-white/50 uppercase tracking-tighter">{isAdmin ? 'Administrador' : 'Usuário'}</p>
+              <p className="text-[11px] font-bold truncate leading-none mb-1">{displayEmail.split('@')[0]}</p>
+              <p className="text-[9px] text-white/50 uppercase tracking-tighter">{effectiveIsAdmin ? 'Administrador' : 'Usuário'}</p>
             </div>
           </div>
-          <button
-            onClick={() => auth.signOut()}
-            className="flex items-center gap-3 w-full px-4 py-2 rounded text-[11px] font-bold uppercase tracking-widest text-white/50 hover:text-white hover:bg-white/5 transition-all"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Sair</span>
-          </button>
+          {user && (
+            <button
+              onClick={() => auth.signOut()}
+              className="flex items-center gap-3 w-full px-4 py-2 rounded text-[11px] font-bold uppercase tracking-widest text-white/50 hover:text-white hover:bg-white/5 transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sair</span>
+            </button>
+          )}
         </div>
       </aside>
 
@@ -150,7 +152,7 @@ const Layout = () => {
             <div className="h-6 w-px bg-slate-200"></div>
             <div className="text-right hidden sm:block">
               <span className="text-[10px] text-slate-500 font-bold uppercase block leading-none">Usuário</span>
-              <span className="text-xs font-bold text-pmpe-navy">{profile?.email}</span>
+              <span className="text-xs font-bold text-pmpe-navy">{displayEmail}</span>
             </div>
           </div>
         </header>

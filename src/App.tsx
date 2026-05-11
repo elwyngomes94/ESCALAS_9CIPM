@@ -20,8 +20,6 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/escalas" element={<Escalas />} />
