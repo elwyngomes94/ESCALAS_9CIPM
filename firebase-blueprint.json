@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "Policeman": {
+      "title": "Policeman",
+      "description": "Dados do policial militar (Pecúlio)",
+      "type": "object",
+      "properties": {
+        "nomeCompleto": { "type": "string" },
+        "nomeGuerra": { "type": "string" },
+        "graduacaoPosto": { "type": "string" },
+        "matricula": { "type": "string" },
+        "telefone": { "type": "string" },
+        "situacao": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nomeCompleto", "nomeGuerra", "graduacaoPosto", "matricula"]
+    },
+    "ServiceType": {
+      "title": "Service Type",
+      "description": "Definição de tipos de serviço (PJES/OPS)",
+      "type": "object",
+      "properties": {
+        "nome": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["PJES", "OPS"] },
+        "cidade": { "type": "string" },
+        "horarioInicio": { "type": "string" },
+        "horarioTermino": { "type": "string" },
+        "observacoes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nome", "tipo", "cidade", "horarioInicio", "horarioTermino"]
+    },
+    "Volunteer": {
+      "title": "Volunteer",
+      "description": "Policiais voluntários para serviços específicos",
+      "type": "object",
+      "properties": {
+        "policemanId": { "type": "string" },
+        "type": { "type": "string", "enum": ["PJES", "OPS"] },
+        "cotas": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["policemanId", "type", "cotas"]
+    },
+    "Escala": {
+      "title": "Escala",
+      "description": "Escala extra criada",
+      "type": "object",
+      "properties": {
+        "serviceTypeId": { "type": "string" },
+        "policemenIds": { "type": "array", "items": { "type": "string" } },
+        "date": { "type": "string", "format": "date-time" },
+        "observations": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["serviceTypeId", "policemenIds", "date"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Dados do usuário do sistema para controle de acesso",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "isAdmin": { "type": "boolean" }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "policemen": {
+      "schema": "Policeman",
+      "description": "Coleção de policiais militares"
+    },
+    "serviceTypes": {
+      "schema": "ServiceType",
+      "description": "Tipos de serviço (PJES/OPS)"
+    },
+    "volunteers": {
+      "schema": "Volunteer",
+      "description": "Pool de voluntários"
+    },
+    "escalas": {
+      "schema": "Escala",
+      "description": "Escalas geradas"
+    },
+    "users": {
+      "schema": "User",
+      "description": "Usuários do sistema"
+    }
+  }
+}

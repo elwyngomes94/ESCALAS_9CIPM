@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function currentEmail() {
+      return request.auth.token.email;
+    }
+
+    function isAdmin() {
+      // Fixed admin email as requested, plus checking users collection for dynamic admins
+      return isSignedIn() && (
+        currentEmail() == 'elwyn.gomes94@gmail.com' || 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Helpers
+    function isValidPoliceman(d) {
+      return d.nomeCompleto is string && d.nomeCompleto.size() <= 200 &&
+             d.nomeGuerra is string && d.nomeGuerra.size() <= 50 &&
+             d.graduacaoPosto is string && d.graduacaoPosto.size() <= 50 &&
+             d.matricula is string && d.matricula.size() <= 20 &&
+             d.telefone is string && d.telefone.size() <= 20 &&
+             d.situacao is string && d.situacao.size() <= 50;
+    }
+
+    function isValidServiceType(d) {
+      return d.nome is string && d.nome.size() <= 100 &&
+             d.tipo in ['PJES', 'OPS'] &&
+             d.cidade is string && d.cidade.size() <= 100 &&
+             d.horarioInicio is string &&
+             d.horarioTermino is string &&
+             (d.observacoes == null || d.observacoes is string);
+    }
+
+    function isValidVolunteer(d) {
+      return isValidId(d.policemanId) &&
+             d.type in ['PJES', 'OPS'] &&
+             d.cotas is number && d.cotas >= 1 && d.cotas <= 12;
+    }
+
+    function isValidEscala(d) {
+      return isValidId(d.serviceTypeId) &&
+             d.policemenIds is list && d.policemenIds.size() > 0 &&
+             d.date is timestamp &&
+             (d.observations == null || d.observations is string);
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId && 
+                     incoming().email == currentEmail() && 
+                     incoming().isAdmin == (currentEmail() == 'elwyn.gomes94@gmail.com');
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['email']) );
+    }
+
+    match /policemen/{policemanId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin() && isValidId(policemanId) && 
+                                    (request.method == 'delete' || isValidPoliceman(incoming()));
+    }
+
+    match /serviceTypes/{serviceTypeId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin() && isValidId(serviceTypeId) &&
+                                    (request.method == 'delete' || isValidServiceType(incoming()));
+    }
+
+    match /volunteers/{volunteerId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin() && isValidId(volunteerId) &&
+                                    (request.method == 'delete' || isValidVolunteer(incoming()));
+    }
+
+    match /escalas/{escalaId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin() && isValidId(escalaId) &&
+                                    (request.method == 'delete' || isValidEscala(incoming()));
+    }
+  }
+}
