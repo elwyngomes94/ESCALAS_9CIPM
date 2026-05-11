@@ -7,6 +7,7 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
     plugins: [react(), tailwindcss()],
+    base: '/',
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
@@ -18,6 +19,8 @@ export default defineConfig(({mode}) => {
     build: {
       outDir: 'dist',
       chunkSizeWarningLimit: 3000,
+      minify: 'esbuild',
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -26,7 +29,10 @@ export default defineConfig(({mode}) => {
               if (id.includes('framer-motion') || id.includes('motion')) return 'vendor-motion';
               if (id.includes('lucide-react')) return 'vendor-icons';
               if (id.includes('react-dom')) return 'vendor-react-dom';
-              if (id.includes('jspdf') || id.includes('xlsx') || id.includes('html2canvas')) return 'vendor-utils';
+              if (id.includes('react-router-dom')) return 'vendor-router';
+              if (id.includes('jspdf')) return 'vendor-jspdf';
+              if (id.includes('xlsx')) return 'vendor-xlsx';
+              if (id.includes('html2canvas')) return 'vendor-canvas';
               if (id.includes('date-fns')) return 'vendor-date-fns';
               return 'vendor';
             }
