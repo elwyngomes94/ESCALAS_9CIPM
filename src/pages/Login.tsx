@@ -36,7 +36,7 @@ const Login = () => {
       } else if (err.code === 'auth/cancelled-popup-request') {
         setError('Solicitação de login cancelada.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        setError('Domínio não autorizado no Firebase. Por favor, adicione os domínios .run.app à lista de domínios autorizados no Firebase Console (Autenticação > Configurações > Domínios Autorizados).');
+        setError('Este domínio não está autorizado no Firebase. No Console do Firebase, vá em Autenticação > Configurações > Domínios Autorizados e adicione o domínio atual (ex: seu-projeto.vercel.app e localhost).');
       } else {
         setError(err.message || 'Erro ao realizar login com Google');
       }
