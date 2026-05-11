@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { motion } from 'motion/react';
-import { Users, Briefcase, ClipboardList, UserCheck, CreditCard } from 'lucide-react';
+import { Users, Briefcase, ClipboardList, UserCheck, CreditCard, Shield } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -126,6 +127,4 @@ const Dashboard = () => {
   );
 };
 
-import { cn } from '../lib/utils';
-import { Shield } from 'lucide-react';
 export default Dashboard;

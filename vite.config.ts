@@ -8,9 +8,6 @@ export default defineConfig(({mode}) => {
   return {
     plugins: [react(), tailwindcss()],
     base: '/',
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
@@ -18,32 +15,21 @@ export default defineConfig(({mode}) => {
     },
     build: {
       outDir: 'dist',
-      chunkSizeWarningLimit: 3000,
-      minify: 'esbuild',
       sourcemap: false,
+      chunkSizeWarningLimit: 3000,
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('firebase')) return 'vendor-firebase';
-              if (id.includes('framer-motion') || id.includes('motion')) return 'vendor-motion';
-              if (id.includes('lucide-react')) return 'vendor-icons';
-              if (id.includes('react-dom')) return 'vendor-react-dom';
-              if (id.includes('react-router-dom')) return 'vendor-router';
-              if (id.includes('jspdf')) return 'vendor-jspdf';
-              if (id.includes('xlsx')) return 'vendor-xlsx';
-              if (id.includes('html2canvas')) return 'vendor-canvas';
-              if (id.includes('date-fns')) return 'vendor-date-fns';
-              return 'vendor';
-            }
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+            'vendor-utils': ['jspdf', 'xlsx', 'html2canvas', 'date-fns'],
           },
         },
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
+      port: 3000,
+      host: '0.0.0.0',
     },
   };
 });
