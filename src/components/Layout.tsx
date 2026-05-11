@@ -47,14 +47,13 @@ const Layout = () => {
 
   // Permite acesso mesmo sem usuário logado
   const displayEmail = profile?.email || 'Visitante';
-  const effectiveIsAdmin = isAdmin || !user; // Se não houver usuário, assume admin para facilitar acesso
 
   const navigation = [
     { to: "/", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/escalas", icon: ClipboardList, label: "Visualizar Escalas" },
   ];
 
-  if (effectiveIsAdmin) {
+  if (isAdmin) {
     navigation.push(
       { to: "/peculio", icon: Users, label: "Pecúlio (Efetivo)" },
       { to: "/servicos", icon: Briefcase, label: "Tipos de Serviço" },
@@ -114,7 +113,7 @@ const Layout = () => {
             </div>
             <div className="overflow-hidden">
               <p className="text-[11px] font-bold truncate leading-none mb-1">{displayEmail.split('@')[0]}</p>
-              <p className="text-[9px] text-white/50 uppercase tracking-tighter">{effectiveIsAdmin ? 'Administrador' : 'Usuário'}</p>
+              <p className="text-[9px] text-white/50 uppercase tracking-tighter">Administrador</p>
             </div>
           </div>
           {user && (

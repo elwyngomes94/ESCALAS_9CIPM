@@ -15,7 +15,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
-  isAdmin: false,
+  isAdmin: true,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -57,7 +57,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin: profile?.isAdmin || false }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin: true }}>
       {children}
     </AuthContext.Provider>
   );
