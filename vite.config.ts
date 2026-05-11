@@ -17,7 +17,7 @@ export default defineConfig(({mode}) => {
     },
     build: {
       outDir: 'dist',
-      chunkSizeWarningLimit: 2500,
+      chunkSizeWarningLimit: 3000,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -27,6 +27,7 @@ export default defineConfig(({mode}) => {
               if (id.includes('lucide-react')) return 'vendor-icons';
               if (id.includes('react-dom')) return 'vendor-react-dom';
               if (id.includes('jspdf') || id.includes('xlsx') || id.includes('html2canvas')) return 'vendor-utils';
+              if (id.includes('date-fns')) return 'vendor-date-fns';
               return 'vendor';
             }
           },
