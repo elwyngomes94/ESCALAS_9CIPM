@@ -35,6 +35,8 @@ const Login = () => {
         setError('O pop-up de login foi bloqueado pelo seu navegador. Por favor, permita pop-ups para este site.');
       } else if (err.code === 'auth/cancelled-popup-request') {
         setError('Solicitação de login cancelada.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('Domínio não autorizado no Firebase. Por favor, adicione os domínios .run.app à lista de domínios autorizados no Firebase Console (Autenticação > Configurações > Domínios Autorizados).');
       } else {
         setError(err.message || 'Erro ao realizar login com Google');
       }
