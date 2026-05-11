@@ -332,6 +332,18 @@ const Escalas = () => {
                 {isSelectionMode ? (
                   <>
                     <button 
+                      onClick={() => {
+                        if (selectedIds.length === filteredEscalas.length) {
+                          setSelectedIds([]);
+                        } else {
+                          setSelectedIds(filteredEscalas.map(esc => esc.id!));
+                        }
+                      }}
+                      className="px-3 py-1.5 text-[9px] font-black text-pmpe-navy uppercase tracking-widest border border-pmpe-navy/20 rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
+                    >
+                      {selectedIds.length === filteredEscalas.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+                    </button>
+                    <button 
                       onClick={() => { setSelectedIds([]); setIsSelectionMode(false); }}
                       className="px-3 py-1.5 text-[9px] font-black text-slate-500 uppercase tracking-widest border border-slate-200 rounded-lg hover:bg-slate-50 transition-all"
                     >
