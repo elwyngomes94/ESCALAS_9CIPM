@@ -50,6 +50,9 @@ const CreateEscala = () => {
     observations: ''
   });
 
+  const [showOnlyDrivers, setShowOnlyDrivers] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
   const toggleDay = (day: number) => {
     if (selectedDays.includes(day)) {
       setSelectedDays(selectedDays.filter(d => d !== day));
@@ -317,6 +320,34 @@ const CreateEscala = () => {
                )}
              </div>
              
+             {formData.serviceTypeId && (
+               <div className="flex flex-col sm:flex-row gap-3 mb-3">
+                 <div className="relative flex-1">
+                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                   <input 
+                     type="text"
+                     placeholder="Buscar por nome ou matrícula..."
+                     value={searchTerm}
+                     onChange={(e) => setSearchTerm(e.target.value)}
+                     className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-pmpe-navy outline-none"
+                   />
+                 </div>
+                 <button
+                   type="button"
+                   onClick={() => setShowOnlyDrivers(!showOnlyDrivers)}
+                   className={cn(
+                     "flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all border",
+                     showOnlyDrivers 
+                       ? "bg-purple-100 border-purple-200 text-purple-700 shadow-sm" 
+                       : "bg-white border-slate-200 text-slate-400 hover:text-slate-600"
+                   )}
+                 >
+                   <Car className="w-3.5 h-3.5" />
+                   {showOnlyDrivers ? 'Apenas Motoristas' : 'Filtrar Motoristas'}
+                 </button>
+               </div>
+             )}
+             
              {!formData.serviceTypeId ? (
                <div className="p-10 border border-slate-100 rounded-xl text-center text-slate-400 italic text-[11px] font-bold uppercase tracking-tight bg-slate-50/50">
                  Selecione um tipo de serviço para listar voluntários.
@@ -328,7 +359,13 @@ const CreateEscala = () => {
                </div>
              ) : (
                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                 {volunteers.map(v => (
+                 {volunteers
+                   .filter(v => {
+                     const mS = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.matricula.includes(searchTerm);
+                     const mD = !showOnlyDrivers || v.policeman?.isMotorista;
+                     return mS && mD;
+                   })
+                   .map(v => (
                    <div 
                       key={v.id} 
                       onClick={() => togglePolice(v.policemanId)}

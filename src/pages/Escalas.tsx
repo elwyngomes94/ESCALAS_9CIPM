@@ -549,6 +549,23 @@ const Escalas = () => {
                           {esc.policemenIds.length} Policiais
                        </div>
                     </div>
+                    
+                    <div className="flex flex-wrap items-center gap-2 mt-2 pt-1 border-t border-slate-100/50">
+                       {esc.policemen && esc.policemen.length > 0 && (
+                         <div className="flex items-center gap-1 text-[8px] font-black text-pmpe-navy bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 flex-shrink-0">
+                           <Crown className="w-2 h-2 text-amber-500" />
+                           <span className="opacity-60">CMDT:</span>
+                           {esc.policemen[0].nomeGuerra}
+                         </div>
+                       )}
+                       {esc.policemen?.filter(p => p.isMotorista).map(p => (
+                         <div key={p.id} className="flex items-center gap-1 text-[8px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 flex-shrink-0">
+                           <Car className="w-2 h-2 text-purple-500" />
+                           <span className="opacity-60">MOT:</span>
+                           {p.nomeGuerra}
+                         </div>
+                       ))}
+                    </div>
                   </div>
                 </div>
                 
