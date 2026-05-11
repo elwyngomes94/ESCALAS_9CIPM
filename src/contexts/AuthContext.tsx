@@ -27,25 +27,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setProfile(userDoc.data() as UserProfile);
+      try {
+        if (user) {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setProfile(userDoc.data() as UserProfile);
+          } else {
+            // Create profile if it doesn't exist
+            const newProfile: UserProfile = {
+              uid: user.uid,
+              email: user.email || '',
+              isAdmin: user.email === 'elwyn.gomes94@gmail.com',
+            };
+            await setDoc(doc(db, 'users', user.uid), newProfile);
+            setProfile(newProfile);
+          }
         } else {
-          // Create profile if it doesn't exist
-          const newProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email || '',
-            isAdmin: user.email === 'elwyn.gomes94@gmail.com',
-          };
-          await setDoc(doc(db, 'users', user.uid), newProfile);
-          setProfile(newProfile);
+          setProfile(null);
         }
-      } else {
-        setProfile(null);
+      } catch (err) {
+        console.error('Error fetching/creating user profile:', err);
+      } finally {
+        setUser(user);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();

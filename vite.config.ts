@@ -7,7 +7,6 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   
   // Ensure GEMINI_API_KEY is available even if not prefixed with VITE_
-  // but also support VITE_GEMINI_API_KEY for convenience
   const geminiKey = env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || '';
 
   return {
@@ -15,8 +14,8 @@ export default defineConfig(({mode}) => {
     base: '/',
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(geminiKey),
-      // Provide a minimal process.env to avoid "process is not defined"
       'process.env.NODE_ENV': JSON.stringify(mode),
+      'process.env': env,
     },
     resolve: {
       alias: {

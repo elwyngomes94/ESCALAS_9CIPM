@@ -1,25 +1,43 @@
-import React, { useState } from 'react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import React, { useState, useEffect } from 'react';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth, googleProvider, signInWithPopup, browserPopupRedirectResolver } from '../lib/firebase';
 import { motion } from 'motion/react';
 import { Shield, Mail, Lock, UserPlus, LogIn, Chrome } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (user && !authLoading) {
+      navigate('/', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
+
+  if (authLoading) return null;
+
   const handleGoogleLogin = async () => {
     setError('');
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
     } catch (err: any) {
-      setError(err.message || 'Erro ao realizar login com Google');
+      console.error('Google Login Error:', err);
+      if (err.code === 'auth/popup-blocked') {
+        setError('O pop-up de login foi bloqueado pelo seu navegador. Por favor, permita pop-ups para este site.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        setError('Solicitação de login cancelada.');
+      } else {
+        setError(err.message || 'Erro ao realizar login com Google');
+      }
     } finally {
       setLoading(false);
     }
