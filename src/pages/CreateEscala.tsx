@@ -3,6 +3,7 @@ import {
   collection, 
   getDocs, 
   addDoc, 
+  doc,
   query, 
   where,
   orderBy,
@@ -145,9 +146,13 @@ const CreateEscala = () => {
         const year = baseDate.getFullYear();
         const month = baseDate.getMonth();
 
+        const { writeBatch } = await import('firebase/firestore');
+        const batch = writeBatch(db);
+
         for (const day of selectedDays) {
           const dateToSave = new Date(year, month, day, 12, 0, 0);
-          await addDoc(collection(db, 'escalas'), {
+          const docRef = doc(collection(db, 'escalas'));
+          batch.set(docRef, {
             serviceTypeId: formData.serviceTypeId,
             policemenIds: formData.selectedPoliceIds,
             date: Timestamp.fromDate(dateToSave),
@@ -155,6 +160,7 @@ const CreateEscala = () => {
             createdAt: serverTimestamp()
           });
         }
+        await batch.commit();
       } else {
         await addDoc(collection(db, 'escalas'), {
           serviceTypeId: formData.serviceTypeId,

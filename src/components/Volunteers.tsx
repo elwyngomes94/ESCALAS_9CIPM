@@ -139,7 +139,8 @@ const Volunteers = ({ type }: VolunteersProps) => {
     if (!window.confirm('Remover este voluntário?')) return;
     try {
       await deleteDoc(doc(db, 'volunteers', id));
-      fetchData();
+      // Optimistic update
+      setVolunteers(prev => prev.filter(v => v.id !== id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'volunteers');
     }

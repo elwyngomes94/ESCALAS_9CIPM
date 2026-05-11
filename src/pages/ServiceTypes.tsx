@@ -101,7 +101,8 @@ const ServiceTypes = () => {
     if (!window.confirm('Deseja realmente excluir este tipo de serviço?')) return;
     try {
       await deleteDoc(doc(db, 'serviceTypes', id));
-      fetchData();
+      // Optimistic update
+      setServices(prev => prev.filter(s => s.id !== id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'serviceTypes');
     }

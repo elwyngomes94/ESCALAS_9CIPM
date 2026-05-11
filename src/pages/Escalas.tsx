@@ -229,7 +229,8 @@ const Escalas = () => {
     if (!window.confirm('Excluir esta escala definitivamente?')) return;
     try {
       await deleteDoc(doc(db, 'escalas', id));
-      fetchData();
+      // Optimistic update: remove from local state immediately
+      setEscalas(prev => prev.filter(e => e.id !== id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'escalas');
     }
@@ -241,13 +242,19 @@ const Escalas = () => {
     
     setLoading(true);
     try {
-      // Basic implementation without batch to keep it simple and reusing handleFirestoreError
-      for (const id of selectedIds) {
-        await deleteDoc(doc(db, 'escalas', id));
-      }
+      const { writeBatch } = await import('firebase/firestore');
+      const batch = writeBatch(db);
+      
+      selectedIds.forEach(id => {
+        batch.delete(doc(db, 'escalas', id));
+      });
+      
+      await batch.commit();
+      
+      // Optimistic update: remove all selected from local state
+      setEscalas(prev => prev.filter(e => !selectedIds.includes(e.id!)));
       setSelectedIds([]);
       setIsSelectionMode(false);
-      fetchData();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'escalas_bulk');
     } finally {

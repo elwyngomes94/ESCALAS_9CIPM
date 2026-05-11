@@ -163,12 +163,19 @@ const Peculio = () => {
     if (aiPreviewData.length === 0) return;
     setAiProcessing(true);
     try {
-      for (const item of aiPreviewData) {
-        await addDoc(collection(db, 'policemen'), {
+      const { writeBatch } = await import('firebase/firestore');
+      const batch = writeBatch(db);
+      
+      aiPreviewData.forEach(item => {
+        const docRef = doc(collection(db, 'policemen'));
+        batch.set(docRef, {
           ...item,
           createdAt: serverTimestamp()
         });
-      }
+      });
+      
+      await batch.commit();
+      
       setIsAiModalOpen(false);
       setAiRawText('');
       setAiPreviewData([]);
@@ -184,7 +191,8 @@ const Peculio = () => {
     if (!window.confirm('Deseja realmente excluir este policial?')) return;
     try {
       await deleteDoc(doc(db, 'policemen', id));
-      fetchData();
+      // Optimistic update
+      setPolicemen(prev => prev.filter(p => p.id !== id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'policemen');
     }
