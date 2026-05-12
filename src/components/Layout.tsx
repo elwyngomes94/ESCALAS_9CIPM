@@ -10,7 +10,8 @@ import {
   LogOut, 
   Menu, 
   X, 
-  Briefcase
+  Briefcase,
+  Calendar
 } from 'lucide-react';
 import { auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
@@ -56,6 +57,7 @@ const Layout = () => {
   if (isAdmin) {
     navigation.push(
       { to: "/peculio", icon: Users, label: "Pecúlio (Efetivo)" },
+      { to: "/escala-ordinaria", icon: Calendar, label: "Escala Ordinária" },
       { to: "/servicos", icon: Briefcase, label: "Tipos de Serviço" },
       { to: "/voluntarios-pjes", icon: UserPlus, label: "Voluntários PJES" },
       { to: "/voluntarios-ops", icon: UserPlus, label: "Voluntários OPS" },

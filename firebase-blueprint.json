@@ -64,6 +64,18 @@
         "isAdmin": { "type": "boolean" }
       },
       "required": ["email"]
+    },
+    "OrdinarySchedule": {
+      "title": "Ordinary Schedule",
+      "description": "Dias de serviço ordinário de um policial em um mês específico",
+      "type": "object",
+      "properties": {
+        "policemanId": { "type": "string" },
+        "month": { "type": "string", "description": "Formato YYYY-MM" },
+        "days": { "type": "array", "items": { "type": "number" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["policemanId", "month", "days"]
     }
   },
   "firestore": {
@@ -86,6 +98,10 @@
     "users": {
       "schema": "User",
       "description": "Usuários do sistema"
+    },
+    "ordinarySchedules": {
+      "schema": "OrdinarySchedule",
+      "description": "Escala ordinária dos policiais (dias fixos de serviço no mês)"
     }
   }
 }

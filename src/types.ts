@@ -46,3 +46,11 @@ export interface UserProfile {
   email: string;
   isAdmin: boolean;
 }
+
+export interface OrdinarySchedule {
+  id?: string;
+  policemanId: string;
+  month: string; // YYYY-MM
+  days: number[];
+  createdAt?: any;
+}

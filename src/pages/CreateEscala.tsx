@@ -43,6 +43,8 @@ const CreateEscala = () => {
 
   const [isMonthlyMode, setIsMonthlyMode] = useState(false);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [ordinarySchedules, setOrdinarySchedules] = useState<Record<string, number[]>>({});
+  const [allEscalasOfMonth, setAllEscalasOfMonth] = useState<Escala[]>([]);
 
   const [formData, setFormData] = useState({
     serviceTypeId: '',
@@ -86,14 +88,39 @@ const CreateEscala = () => {
       const selectedService = services.find(s => s.id === formData.serviceTypeId);
       if (!selectedService) return;
 
+      const dateObj = new Date(formData.date + 'T12:00:00');
+      const mKey = format(dateObj, 'yyyy-MM');
+
       try {
         const vQ = query(collection(db, 'volunteers'), where('type', '==', selectedService.tipo));
         const vSnap = await getDocs(vQ);
         
-        // Fetch existing scales for this service to highlight occupied days
+        // Fetch existing scales for this service to highlight occupied days in calendar
         const eQ = query(collection(db, 'escalas'), where('serviceTypeId', '==', formData.serviceTypeId));
         const eSnap = await getDocs(eQ);
         setExistingScales(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as Escala)));
+
+        // Fetch ALL scales of the month for all services to check for concurrency
+        const monthStart = Timestamp.fromDate(startOfMonth(dateObj));
+        const monthEnd = Timestamp.fromDate(endOfMonth(dateObj));
+        const allMQS = await getDocs(query(
+          collection(db, 'escalas'), 
+          where('date', '>=', monthStart),
+          where('date', '<=', monthEnd)
+        ));
+        setAllEscalasOfMonth(allMQS.docs.map(d => ({ id: d.id, ...d.data() } as Escala)));
+
+        // Fetch Ordinary Schedules for the month
+        const ordSnap = await getDocs(query(
+          collection(db, 'ordinarySchedules'),
+          where('month', '==', mKey)
+        ));
+        const oMap: Record<string, number[]> = {};
+        ordSnap.docs.forEach(d => {
+          const data = d.data();
+          oMap[data.policemanId] = data.days || [];
+        });
+        setOrdinarySchedules(oMap);
 
         const polySnap = await getDocs(collection(db, 'policemen'));
         const polyData = polySnap.docs.map(d => ({ id: d.id, ...d.data() } as Policeman));
@@ -116,7 +143,7 @@ const CreateEscala = () => {
       }
     };
     fetchVolunteersAndScales();
-  }, [formData.serviceTypeId, services]);
+  }, [formData.serviceTypeId, formData.date, services]);
 
   const togglePolice = (id: string) => {
     setFormData(prev => ({
@@ -124,6 +151,45 @@ const CreateEscala = () => {
       selectedPoliceIds: prev.selectedPoliceIds.includes(id)
         ? prev.selectedPoliceIds.filter(pId => pId !== id)
         : [...prev.selectedPoliceIds, id]
+    }));
+  };
+
+  const getDayConflicts = (policemanId: string, dateStr: string) => {
+    const day = getDate(new Date(dateStr + 'T12:00:00'));
+    const isOrdinary = (ordinarySchedules[policemanId] || []).includes(day);
+    
+    const extraScalesOnDay = allEscalasOfMonth.filter(esc => {
+      const escDateStr = format(esc.date.toDate(), 'yyyy-MM-dd');
+      return escDateStr === dateStr && esc.policemenIds.includes(policemanId);
+    });
+
+    return {
+      isOrdinary,
+      hasExtra: extraScalesOnDay.length > 0,
+      totalExtrasInMonth: allEscalasOfMonth.filter(esc => esc.policemenIds.includes(policemanId)).length
+    };
+  };
+
+  const smartSuggest = () => {
+    if (!formData.serviceTypeId) return;
+    
+    const availableVolunteers = volunteers.filter(v => {
+      const conflicts = getDayConflicts(v.policemanId, formData.date);
+      return !conflicts.isOrdinary && !conflicts.hasExtra;
+    });
+
+    // Sort by fewer extras in month (fair distribution)
+    availableVolunteers.sort((a, b) => {
+      const cA = getDayConflicts(a.policemanId, formData.date).totalExtrasInMonth;
+      const cB = getDayConflicts(b.policemanId, formData.date).totalExtrasInMonth;
+      return cA - cB;
+    });
+
+    // Pick top 4 suggestions
+    const suggestedIds = availableVolunteers.slice(0, 4).map(v => v.policemanId);
+    setFormData(prev => ({
+      ...prev,
+      selectedPoliceIds: [...new Set([...prev.selectedPoliceIds, ...suggestedIds])]
     }));
   };
 
@@ -363,19 +429,29 @@ const CreateEscala = () => {
                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-pmpe-navy outline-none"
                    />
                  </div>
-                 <button
-                   type="button"
-                   onClick={() => setShowOnlyDrivers(!showOnlyDrivers)}
-                   className={cn(
-                     "flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all border",
-                     showOnlyDrivers 
-                       ? "bg-purple-100 border-purple-200 text-purple-700 shadow-sm" 
-                       : "bg-white border-slate-200 text-slate-400 hover:text-slate-600"
-                   )}
-                 >
-                   <Car className="w-3.5 h-3.5" />
-                   {showOnlyDrivers ? 'Apenas Motoristas' : 'Filtrar Motoristas'}
-                 </button>
+                 <div className="flex gap-2">
+                   <button
+                     type="button"
+                     onClick={smartSuggest}
+                     className="flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                   >
+                     <CheckCircle2 className="w-3.5 h-3.5" />
+                     Sugerir Efetivo
+                   </button>
+                   <button
+                     type="button"
+                     onClick={() => setShowOnlyDrivers(!showOnlyDrivers)}
+                     className={cn(
+                       "flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all border",
+                       showOnlyDrivers 
+                         ? "bg-purple-100 border-purple-200 text-purple-700 shadow-sm" 
+                         : "bg-white border-slate-200 text-slate-400 hover:text-slate-600"
+                     )}
+                   >
+                     <Car className="w-3.5 h-3.5" />
+                     {showOnlyDrivers ? 'Apenas Motoristas' : 'Motoristas'}
+                   </button>
+                 </div>
                </div>
              )}
              
@@ -396,33 +472,52 @@ const CreateEscala = () => {
                      const mD = !showOnlyDrivers || v.policeman?.isMotorista;
                      return mS && mD;
                    })
-                   .map(v => (
-                   <div 
-                      key={v.id} 
-                      onClick={() => togglePolice(v.policemanId)}
-                      className={cn(
-                        "p-2.5 rounded-lg border transition-all cursor-pointer flex items-center gap-2.5 active:scale-[0.98]",
-                        formData.selectedPoliceIds.includes(v.policemanId) 
-                          ? "border-pmpe-navy bg-pmpe-navy/5 shadow-inner" 
-                          : "border-slate-100 bg-white hover:border-slate-300"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
-                        formData.selectedPoliceIds.includes(v.policemanId) ? "bg-pmpe-navy border-pmpe-navy" : "border-slate-300 bg-white"
-                      )}>
-                        {formData.selectedPoliceIds.includes(v.policemanId) && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                         <div className="flex items-center gap-1.5 leading-none mb-0.5">
-                            <p className="text-[12px] font-black text-slate-800 truncate">{v.policeman?.nomeGuerra}</p>
-                            {volunteers.indexOf(v) === 0 && <span title="Possível Comandante"><Crown className="w-2.5 h-2.5 text-amber-500" /></span>}
-                            {v.policeman?.isMotorista && <span title="Motorista do Quadro"><Car className="w-2.5 h-2.5 text-purple-500" /></span>}
-                         </div>
-                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{v.policeman?.graduacaoPosto} | PM {v.policeman?.matricula}</p>
-                      </div>
-                   </div>
-                 ))}
+                   .map(v => {
+                     const conflicts = getDayConflicts(v.policemanId, formData.date);
+                     const isSelected = formData.selectedPoliceIds.includes(v.policemanId);
+                     
+                     return (
+                       <div 
+                          key={v.id} 
+                          onClick={() => togglePolice(v.policemanId)}
+                          className={cn(
+                            "p-2.5 rounded-lg border transition-all cursor-pointer flex items-center gap-2.5 active:scale-[0.98] relative",
+                            isSelected 
+                              ? "border-pmpe-navy bg-pmpe-navy/5 shadow-inner" 
+                              : "border-slate-100 bg-white hover:border-slate-300",
+                            (conflicts.isOrdinary || conflicts.hasExtra) && !isSelected && "opacity-60 bg-slate-50 grayscale"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
+                            isSelected ? "bg-pmpe-navy border-pmpe-navy" : "border-slate-300 bg-white"
+                          )}>
+                            {isSelected && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                             <div className="flex items-center gap-1.5 leading-none mb-0.5">
+                                <p className="text-[12px] font-black text-slate-800 truncate">{v.policeman?.nomeGuerra}</p>
+                                {volunteers.indexOf(v) === 0 && <span title="Possível Comandante"><Crown className="w-2.5 h-2.5 text-amber-500" /></span>}
+                                {v.policeman?.isMotorista && <span title="Motorista do Quadro"><Car className="w-2.5 h-2.5 text-purple-500" /></span>}
+                             </div>
+                             <div className="flex items-center gap-2">
+                               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{v.policeman?.graduacaoPosto}</p>
+                               {conflicts.isOrdinary && (
+                                 <span className="text-[7px] font-black bg-red-100 text-red-600 px-1 py-0.5 rounded uppercase leading-none">ORDINÁRIA</span>
+                               )}
+                               {conflicts.hasExtra && (
+                                 <span className="text-[7px] font-black bg-blue-100 text-blue-600 px-1 py-0.5 rounded uppercase leading-none">EXTRA</span>
+                               )}
+                             </div>
+                          </div>
+                          {conflicts.totalExtrasInMonth > 0 && (
+                            <div className="absolute top-1 right-1 text-[7px] font-black text-slate-300">
+                              {conflicts.totalExtrasInMonth}x
+                            </div>
+                          )}
+                       </div>
+                     );
+                   })}
                </div>
              )}
           </div>
