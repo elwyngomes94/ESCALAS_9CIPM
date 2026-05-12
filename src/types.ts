@@ -26,7 +26,11 @@ export interface Policeman {
 export interface ServiceType {
   id?: string;
   nome: string;
-  tipo: 'PJES' | 'OPS';
+  tipo: 'PJES' | 'OPS' | 'ORDINARIO' | 'EXTRA';
+  categoria: string; // Patrulha, GGI, Guarda, Operação, Apoio, Supervisão, Tático, etc.
+  sigla: string;
+  color: string;
+  iconName?: string;
   cidade: string;
   horarioInicio: string;
   horarioTermino: string;
