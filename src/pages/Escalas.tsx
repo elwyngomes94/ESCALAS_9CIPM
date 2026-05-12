@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   collection, 
   getDocs, 
@@ -32,6 +32,7 @@ import {
   FileSpreadsheet,
   MessageCircle,
   FileText,
+  Printer,
   ClipboardList,
   Edit2,
   Trash2,
@@ -42,14 +43,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Crown,
-  Car
+  Car,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, getDate } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
 
 const Escalas = () => {
   const { isAdmin } = useAuth();
@@ -59,6 +62,19 @@ const Escalas = () => {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
+  // Report State
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportConfig, setReportConfig] = useState({
+    mode: 'SEI' as 'SEI' | 'MATRIX',
+    scope: 'MONTH' as 'DAY' | 'MONTH' | 'FILTERED',
+    serviceTypeId: '',
+    date: format(new Date(), 'yyyy-MM-dd')
+  });
+  const [generatingReport, setGeneratingReport] = useState(false);
+  
+  const reportRef = useRef<HTMLDivElement>(null);
+  const matrixRef = useRef<HTMLDivElement>(null);
+
   // Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -266,6 +282,130 @@ const Escalas = () => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
+  const getReportScales = () => {
+    return escalas.filter(esc => {
+      const escDate = esc.date.toDate();
+      const escDateStr = format(escDate, 'yyyy-MM-dd');
+      
+      if (reportConfig.scope === 'DAY') {
+        return escDateStr === reportConfig.date;
+      }
+      if (reportConfig.scope === 'MONTH') {
+        return format(escDate, 'yyyy-MM') === format(new Date(reportConfig.date + '-01'), 'yyyy-MM');
+      }
+      if (reportConfig.scope === 'FILTERED') {
+        const matchesDate = filterDate ? escDateStr === filterDate : true;
+        const matchesCity = filterCity ? esc.service?.cidade.toLowerCase().includes(filterCity.toLowerCase()) : true;
+        const matchesType = filterType ? esc.service?.tipo === filterType : true;
+        const matchesPolice = filterPolice ? esc.policemen?.some(p => p.nomeGuerra.toLowerCase().includes(filterPolice.toLowerCase())) : true;
+        return matchesDate && matchesCity && matchesType && matchesPolice;
+      }
+      return true;
+    }).filter(esc => reportConfig.serviceTypeId ? esc.serviceTypeId === reportConfig.serviceTypeId : true);
+  };
+
+  const exportBatchExcel = () => {
+    const reportScales = getReportScales();
+    if (reportScales.length === 0) return alert('Nenhuma escala para exportar.');
+
+    if (reportConfig.mode === 'SEI') {
+      const data = reportScales.flatMap(esc => 
+        esc.policemen?.map(p => ({
+          'Posto/Graduação': p.graduacaoPosto,
+          'Matrícula': p.matricula,
+          'Nome de Guerra': p.nomeGuerra,
+          'OME': '9ª CIPM',
+          'Função': p.isMotorista ? 'Motorista' : (esc.policemenIds[0] === p.id ? 'Comandante' : 'Patrulheiro'),
+          'Dia': getDate(esc.date.toDate()),
+          'Cotas': 1,
+          'Jornada': `${esc.service?.horarioInicio} às ${esc.service?.horarioTermino}`,
+          'Serviço': esc.service?.nome
+        }))
+      );
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Escalas");
+      XLSX.writeFile(wb, `Relatorio_Escalas_${reportConfig.scope}_${reportConfig.date}.xlsx`);
+    } else {
+      // Matrix Excel
+      const pSnap = escalas.flatMap(e => e.policemen || []);
+      const uniqueP = Array.from(new Set(pSnap.map(p => p.id))).map(id => pSnap.find(p => p.id === id)!);
+      
+      const days = eachDayOfInterval({
+        start: startOfMonth(new Date(reportConfig.date + '-01')),
+        end: endOfMonth(new Date(reportConfig.date + '-01'))
+      });
+
+      const rows = uniqueP.map(p => {
+        const row: any = { 'Policial': `${p.graduacaoPosto} ${p.nomeGuerra}` };
+        days.forEach(day => {
+          const d = getDate(day);
+          const found = reportScales.find(e => isSameDay(e.date.toDate(), day) && e.policemenIds.includes(p.id!));
+          row[d] = found ? found.service?.nome : '';
+        });
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Mapa Mensal");
+      XLSX.writeFile(wb, `Mapa_Mensal_${reportConfig.date}.xlsx`);
+    }
+  };
+
+  const exportBatchPDF = async () => {
+    const targetRef = reportConfig.mode === 'SEI' ? reportRef : matrixRef;
+    if (!targetRef.current) return;
+    
+    setGeneratingReport(true);
+    try {
+      const canvas = await html2canvas(targetRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF(reportConfig.mode === 'MATRIX' ? 'l' : 'p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+      pdf.save(`Relatorio_${reportConfig.mode}_${reportConfig.date}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao gerar PDF');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  const shareBatchWhatsApp = () => {
+    const reportScales = getReportScales();
+    if (reportScales.length === 0) return alert('Nenhuma escala para compartilhar.');
+
+    let message = `*RELATÓRIO DE ESCALAS - 9ª CIPM*\n`;
+    message += `*Escopo:* ${reportConfig.scope}\n`;
+    message += `*Referência:* ${reportConfig.date}\n`;
+    message += `----------------------------\n\n`;
+
+    reportScales.forEach((esc, idx) => {
+      message += `*${idx + 1}. ${esc.service?.nome}*\n`;
+      message += `📅 ${format(esc.date.toDate(), 'dd/MM/yyyy')} | ⏰ ${esc.service?.horarioInicio}-${esc.service?.horarioTermino}\n`;
+      message += `📍 ${esc.service?.cidade}\n`;
+      message += `👥 *EFETIVO:*\n`;
+      esc.policemen?.forEach(p => {
+        message += ` - ${p.graduacaoPosto} ${p.nomeGuerra}\n`;
+      });
+      message += `\n`;
+    });
+
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
   const filteredEscalas = escalas.filter(esc => {
     const matchesDate = filterDate ? format(esc.date.toDate(), 'yyyy-MM-dd') === filterDate : true;
     const matchesCity = filterCity ? esc.service?.cidade.toLowerCase().includes(filterCity.toLowerCase()) : true;
@@ -336,6 +476,14 @@ const Escalas = () => {
           <div className="flex items-center gap-2">
             {isAdmin && (
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="px-3 py-1.5 text-[9px] font-black text-white uppercase tracking-widest bg-pmpe-navy rounded-lg shadow-sm hover:bg-slate-800 transition-all flex items-center gap-2"
+                >
+                  <FileText className="w-3.5 h-3.5 text-pmpe-gold" />
+                  Gerar Relatórios
+                </button>
+                <div className="w-px h-6 bg-slate-200 mx-1" />
                 {isSelectionMode ? (
                   <>
                     <button 
@@ -833,6 +981,315 @@ const Escalas = () => {
           </div>
         )}
       </AnimatePresence>
+      
+      {/* REPORT GENERATOR MODAL */}
+      <AnimatePresence>
+        {isReportModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+              onClick={() => !generatingReport && setIsReportModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl relative z-[130] overflow-hidden border border-slate-200"
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-pmpe-navy flex items-center justify-center shadow-lg shadow-pmpe-navy/20">
+                    <ClipboardList className="w-6 h-6 text-pmpe-gold" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tighter">Gerador de Relatórios Estruturados</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mt-1">Exportação oficial e monitoramento mensal</p>
+                  </div>
+                </div>
+                {!generatingReport && (
+                  <button 
+                    onClick={() => setIsReportModalOpen(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                )}
+              </div>
+
+              <div className="p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Configuration side */}
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase text-pmpe-navy tracking-[0.2em] flex items-center gap-2">
+                       <LayoutGrid className="w-3 h-3" /> Configurações do Relatório
+                    </h4>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Modelo de Visualização</label>
+                        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                          <button 
+                            onClick={() => setReportConfig({...reportConfig, mode: 'SEI'})}
+                            className={cn(
+                              "flex-1 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                              reportConfig.mode === 'SEI' ? "bg-white text-pmpe-navy shadow-sm" : "text-slate-400"
+                            )}
+                          >
+                            Padrão SEI
+                          </button>
+                          <button 
+                            onClick={() => setReportConfig({...reportConfig, mode: 'MATRIX'})}
+                            className={cn(
+                              "flex-1 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                              reportConfig.mode === 'MATRIX' ? "bg-white text-pmpe-navy shadow-sm" : "text-slate-400"
+                            )}
+                          >
+                            Mapa Mensal
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Escopo do Relatório</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['DAY', 'MONTH', 'FILTERED'] as const).map(s => (
+                            <button
+                              key={s}
+                              onClick={() => setReportConfig({...reportConfig, scope: s})}
+                              className={cn(
+                                "px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all",
+                                reportConfig.scope === s 
+                                  ? "bg-pmpe-navy text-white border-pmpe-navy shadow-md" 
+                                  : "bg-white text-slate-400 border-slate-100 hover:border-slate-200"
+                              )}
+                            >
+                              {s === 'DAY' ? 'Diário' : s === 'MONTH' ? 'Mensal' : 'Filtro Atual'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {reportConfig.scope !== 'FILTERED' && (
+                          <div className={cn(reportConfig.scope === 'MONTH' ? "col-span-2" : "")}>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">
+                              {reportConfig.scope === 'DAY' ? 'Data de Referência' : 'Mês de Referência'}
+                            </label>
+                            <input
+                              type={reportConfig.scope === 'DAY' ? "date" : "month"}
+                              value={reportConfig.date}
+                              onChange={(e) => setReportConfig({...reportConfig, date: e.target.value})}
+                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-1 focus:ring-pmpe-navy outline-none"
+                            />
+                          </div>
+                        )}
+                        {reportConfig.mode === 'SEI' && (
+                          <div className={cn(reportConfig.scope === 'FILTERED' ? "col-span-2" : "")}>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Tipo de Serviço</label>
+                            <select
+                              value={reportConfig.serviceTypeId}
+                              onChange={(e) => setReportConfig({...reportConfig, serviceTypeId: e.target.value})}
+                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-1 focus:ring-pmpe-navy outline-none"
+                            >
+                              <option value="">TODOS OS SERVIÇOS</option>
+                              {services.map(s => (
+                                <option key={s.id} value={s.id!}>{s.nome} - {s.tipo}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-slate-100 space-y-4">
+                     <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Ações de Exportação</h4>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button 
+                          onClick={exportBatchPDF}
+                          disabled={generatingReport}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20 disabled:opacity-50"
+                        >
+                          {generatingReport ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Download className="w-4 h-4" />}
+                          PDF
+                        </button>
+                        <button 
+                          onClick={exportBatchExcel}
+                          disabled={generatingReport}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                        >
+                          <FileSpreadsheet className="w-4 h-4" />
+                          Excel
+                        </button>
+                        <button 
+                          onClick={shareBatchWhatsApp}
+                          disabled={generatingReport}
+                          className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 disabled:opacity-50"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          WhatsApp
+                        </button>
+                     </div>
+                  </div>
+                </div>
+
+                {/* Preview / Info side */}
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200/50 flex flex-col justify-between">
+                   <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                         <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Resumo do Relatório</h4>
+                         <span className="px-2 py-1 bg-pmpe-navy text-pmpe-gold text-[8px] font-black uppercase rounded shadow-sm">
+                           {getReportScales().length} Escalas Encontradas
+                         </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                         {getReportScales().slice(0, 5).map(esc => (
+                           <div key={esc.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                              <div className="flex items-center gap-3">
+                                 <div className="text-[9px] font-black text-pmpe-navy opacity-50">{format(esc.date.toDate(), 'dd/MM')}</div>
+                                 <div className="text-[11px] font-bold text-slate-700">{esc.service?.nome}</div>
+                              </div>
+                              <div className="text-[10px] font-black text-slate-400">{esc.policemenIds.length} Ativos</div>
+                           </div>
+                         ))}
+                         {getReportScales().length > 5 && (
+                           <p className="text-center text-[10px] font-bold text-slate-400 uppercase italic">+ {getReportScales().length - 5} outras escalas...</p>
+                         )}
+                         {getReportScales().length === 0 && (
+                           <div className="py-20 flex flex-col items-center gap-2 opacity-30">
+                              <AlertTriangle className="w-8 h-8" />
+                              <p className="text-[10px] font-black uppercase">Nenhuma escala no período</p>
+                           </div>
+                         )}
+                      </div>
+                   </div>
+
+                   <div className="bg-pmpe-navy p-4 rounded-2xl text-white space-y-2">
+                      <div className="flex items-center gap-2 text-pmpe-gold">
+                         <Info className="w-4 h-4" />
+                         <span className="text-[10px] font-black uppercase tracking-widest">Informação Importante</span>
+                      </div>
+                      <p className="text-[11px] text-white/70 leading-relaxed font-medium">
+                        O modelo **SEI** gera o formato oficial de diário para upload no sistema governamental. O modelo **MAPA** fornece a visão estratégica horizontal de todo o mês.
+                      </p>
+                   </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* HIDDEN REPORT VIEWS FOR HTML2CANVAS */}
+      <div className="fixed -left-[4000px] top-0 pointer-events-none overflow-hidden">
+         {/* SEI REPORT VIEW */}
+         <div 
+            ref={reportRef}
+            className="bg-white p-[15mm] text-black font-serif"
+            style={{ width: '210mm', minHeight: '297mm' }}
+          >
+            <div className="flex flex-col items-center mb-8">
+              <div className="flex gap-8 items-center mb-4">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Brasao_PMPE.png/200px-Brasao_PMPE.png" alt="PMPE" className="h-16" />
+                <div className="text-center">
+                  <p className="text-[10px] font-bold uppercase">Secretaria de Defesa Social</p>
+                  <p className="text-lg font-bold text-blue-800 italic uppercase">Pernambuco</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest">Governo do Estado</p>
+                </div>
+              </div>
+              <h3 className="text-sm font-bold uppercase tracking-tight mb-2">Polícia Militar de Pernambuco</h3>
+              <p className="text-[10px] font-bold uppercase mb-4">ESCALA DE SERVIÇO nº {Math.floor(Math.random() * 100) + 1} – PMPE - 9CIPM-P1</p>
+              <h2 className="text-sm font-black uppercase mb-1 underline">ESCALA DE SERVIÇO - {reportConfig.date}</h2>
+            </div>
+
+            <table className="w-full border-collapse border border-slate-300 text-[9px]">
+              <thead>
+                <tr className="bg-slate-50 font-bold uppercase text-[7px]">
+                  <th className="border border-slate-300 p-1">Graduação</th>
+                  <th className="border border-slate-300 p-1">Matrícula</th>
+                  <th className="border border-slate-300 p-1">Nome de Guerra</th>
+                  <th className="border border-slate-300 p-1">Função</th>
+                  <th className="border border-slate-300 p-1">Dia</th>
+                  <th className="border border-slate-300 p-1">Jornada</th>
+                  <th className="border border-slate-300 p-1">Serviço</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getReportScales().map((esc) => (
+                  <React.Fragment key={esc.id}>
+                    {esc.policemen?.map((p, pIdx) => (
+                      <tr key={`${esc.id}-${p.id}`}>
+                        <td className="border border-slate-300 p-1 text-center">{p.graduacaoPosto}</td>
+                        <td className="border border-slate-300 p-1 text-center">{p.matricula}</td>
+                        <td className="border border-slate-300 p-1 px-2">{p.nomeGuerra}</td>
+                        <td className="border border-slate-300 p-1 text-center uppercase">
+                          {pIdx === 0 ? 'Comandante' : (p.isMotorista ? 'Motorista' : 'Patrulheiro')}
+                        </td>
+                        <td className="border border-slate-300 p-1 text-center">{getDate(esc.date.toDate())}</td>
+                        <td className="border border-slate-300 p-1 text-center">{esc.service?.horarioInicio} às {esc.service?.horarioTermino}</td>
+                        <td className="border border-slate-300 p-1 text-center">{esc.service?.nome}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* MATRIX REPORT VIEW */}
+          <div 
+            ref={matrixRef}
+            className="bg-white p-8 text-black"
+            style={{ width: '297mm', minHeight: '210mm' }}
+          >
+            <div className="text-center mb-8 border-b-2 border-pmpe-navy pb-6">
+              <h2 className="text-2xl font-black text-pmpe-navy uppercase tracking-tight">Mapa de Distribuição Operacional</h2>
+              <p className="text-sm font-bold text-slate-500 uppercase tracking-[0.3em]">{reportConfig.date}</p>
+            </div>
+            <table className="w-full border-collapse">
+               <thead>
+                 <tr>
+                    <th className="border-2 border-slate-800 p-2 bg-slate-800 text-white text-[10px] uppercase font-black min-w-[150px]">Policial</th>
+                    {eachDayOfInterval({
+                      start: startOfMonth(new Date(reportConfig.date + '-01')),
+                      end: endOfMonth(new Date(reportConfig.date + '-01'))
+                    }).map(day => (
+                      <th key={day.toISOString()} className="border-2 border-slate-300 p-1 w-8 text-[9px] font-black uppercase bg-slate-50">
+                        {getDate(day)}
+                      </th>
+                    ))}
+                 </tr>
+               </thead>
+               <tbody>
+                  {Array.from(new Set(getReportScales().flatMap(e => e.policemenIds))).map(pid => {
+                    const poly = escalas.flatMap(e => e.policemen || []).find(p => p.id === pid);
+                    if (!poly) return null;
+                    return (
+                      <tr key={pid}>
+                         <td className="border-2 border-slate-300 p-2 text-[10px] font-bold">{poly.graduacaoPosto} {poly.nomeGuerra}</td>
+                         {eachDayOfInterval({
+                            start: startOfMonth(new Date(reportConfig.date + '-01')),
+                            end: endOfMonth(new Date(reportConfig.date + '-01'))
+                          }).map(day => {
+                            const esc = getReportScales().find(e => isSameDay(e.date.toDate(), day) && e.policemenIds.includes(pid));
+                            return (
+                              <td key={day.toISOString()} className={cn("border-2 border-slate-300 p-0 text-center h-8", esc ? "bg-pmpe-navy/10" : "")}>
+                                {esc && <span className="text-[7px] font-black text-pmpe-navy">{esc.service?.tipo === 'PJES' ? 'P' : 'O'}</span>}
+                              </td>
+                            );
+                          })}
+                      </tr>
+                    );
+                  })}
+               </tbody>
+            </table>
+          </div>
+      </div>
     </div>
   );
 };

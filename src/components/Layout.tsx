@@ -60,7 +60,6 @@ const Layout = () => {
       { to: "/peculio", icon: Users, label: "Pecúlio (Efetivo)" },
       { to: "/escala-ordinaria", icon: Calendar, label: "Escala Ordinária" },
       { to: "/servicos", icon: Briefcase, label: "Tipos de Serviço" },
-      { to: "/relatorios", icon: FileText, label: "Relatórios" },
       { to: "/voluntarios-pjes", icon: UserPlus, label: "Voluntários PJES" },
       { to: "/voluntarios-ops", icon: UserPlus, label: "Voluntários OPS" },
       { to: "/criar-escala", icon: Shield, label: "Criar Escalas" }
