@@ -85,8 +85,21 @@ const Layout = () => {
       )}>
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-pmpe-navy font-bold text-xl shadow-inner italic border-2 border-pmpe-gold/20">
-              9
+            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-inner border-2 border-pmpe-gold/20 overflow-hidden p-1">
+              <img 
+                src="/logo_9cipm.png" 
+                alt="9ª CIPM Logo"
+                className="w-full h-full object-contain"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  // Fallback para texto caso a imagem não exista
+                  e.currentTarget.style.display = 'none';
+                  const parent = e.currentTarget.parentElement;
+                  if (parent) {
+                    parent.innerHTML = '<span class="text-pmpe-navy font-bold text-lg italic">9</span>';
+                  }
+                }}
+              />
             </div>
             <div>
               <h1 className="text-xs font-bold uppercase tracking-wider leading-tight">9ª CIPM - PMPE</h1>

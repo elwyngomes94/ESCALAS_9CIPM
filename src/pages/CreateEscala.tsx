@@ -263,9 +263,34 @@ const CreateEscala = () => {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden border-t border-slate-100 pt-4"
               >
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                  Selecionar Dias do Mês
-                </label>
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    Selecionar Dias do Mês
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedDays.length === eachDayOfInterval({
+                        start: startOfMonth(new Date(formData.date + 'T12:00:00')),
+                        end: endOfMonth(new Date(formData.date + 'T12:00:00'))
+                      }).length) {
+                        setSelectedDays([]);
+                      } else {
+                        const days = eachDayOfInterval({
+                          start: startOfMonth(new Date(formData.date + 'T12:00:00')),
+                          end: endOfMonth(new Date(formData.date + 'T12:00:00'))
+                        }).map(d => getDate(d));
+                        setSelectedDays(days);
+                      }
+                    }}
+                    className="text-[9px] font-black underline uppercase tracking-widest text-pmpe-navy hover:text-slate-800 transition-all"
+                  >
+                    {selectedDays.length === eachDayOfInterval({
+                      start: startOfMonth(new Date(formData.date + 'T12:00:00')),
+                      end: endOfMonth(new Date(formData.date + 'T12:00:00'))
+                    }).length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                  </button>
+                </div>
                 <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5">
                   {eachDayOfInterval({
                     start: startOfMonth(new Date(formData.date + 'T12:00:00')),
