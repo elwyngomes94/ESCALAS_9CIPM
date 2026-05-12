@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   collection, 
   getDocs, 
+  getDoc,
   addDoc, 
   updateDoc, 
   deleteDoc, 
@@ -9,7 +10,8 @@ import {
   query, 
   where,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { Policeman, Volunteer } from '../types';
@@ -29,10 +31,12 @@ import {
   Car,
   ChevronLeft,
   ChevronRight,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, addMonths, subMonths } from 'date-fns';
+import { format, addMonths, subMonths, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, getDate, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface VolunteersProps {
@@ -49,6 +53,7 @@ const Volunteers = ({ type }: VolunteersProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [polySearch, setPolySearch] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
   
   const monthKey = format(currentDate, 'yyyy-MM');
   const monthName = format(currentDate, 'MMMM yyyy', { locale: ptBR });
@@ -85,6 +90,27 @@ const Volunteers = ({ type }: VolunteersProps) => {
       setLoading(false);
     }
   };
+
+  const fetchOrdinarySchedule = async (policemanId: string) => {
+    if (!policemanId) return;
+    try {
+      const docRef = doc(db, 'ordinarySchedules', `${policemanId}_${monthKey}`);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setSelectedDays(docSnap.data().days || []);
+      } else {
+        setSelectedDays([]);
+      }
+    } catch (err) {
+      console.error("Error fetching schedule:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (formData.policemanId && isModalOpen) {
+      fetchOrdinarySchedule(formData.policemanId);
+    }
+  }, [formData.policemanId, monthKey, isModalOpen]);
 
   const handleImportPrevious = async () => {
     if (!window.confirm('Deseja importar a lista de voluntários do mês anterior para o mês atual?')) return;
@@ -162,17 +188,34 @@ const Volunteers = ({ type }: VolunteersProps) => {
     }
 
     try {
+      const batch = writeBatch(db);
+
+      // Volunteer record
       if (editingId) {
-        await updateDoc(doc(db, 'volunteers', editingId), {
+        batch.update(doc(db, 'volunteers', editingId), {
           ...formData,
           updatedAt: serverTimestamp()
         });
       } else {
-        await addDoc(collection(db, 'volunteers'), {
+        const newVolRef = doc(collection(db, 'volunteers'));
+        batch.set(newVolRef, {
           ...formData,
           createdAt: serverTimestamp()
         });
       }
+
+      // Ordinary Schedule record
+      const scheduleId = `${formData.policemanId}_${monthKey}`;
+      const scheduleRef = doc(db, 'ordinarySchedules', scheduleId);
+      batch.set(scheduleRef, {
+        policemanId: formData.policemanId,
+        month: monthKey,
+        days: selectedDays,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      await batch.commit();
+
       setIsModalOpen(false);
       setEditingId(null);
       setFormData({
@@ -181,6 +224,7 @@ const Volunteers = ({ type }: VolunteersProps) => {
         cotas: 1,
         month: monthKey
       });
+      setSelectedDays([]);
       fetchData();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'volunteers');
@@ -375,136 +419,205 @@ const Volunteers = ({ type }: VolunteersProps) => {
               className="absolute inset-0 bg-pmpe-navy/40 backdrop-blur-sm"
               onClick={() => setIsModalOpen(false)}
             />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white w-full max-w-md rounded-2xl shadow-2xl relative z-[110] overflow-hidden border border-slate-200"
-            >
-              <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">
-                  {editingId ? `Editar Voluntário ${type}` : `Adicionar Voluntário ${type}`}
-                </h3>
-                <button 
-                  onClick={() => setIsModalOpen(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl relative z-[110] overflow-hidden border border-slate-200"
+              >
+                <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">
+                    {editingId ? `Editar Voluntário ${type}` : `Adicionar Voluntário ${type}`}
+                  </h3>
+                  <button 
+                    onClick={() => {
+                        setIsModalOpen(false);
+                        setEditingId(null);
+                        setFormData({
+                          policemanId: '',
+                          type: type,
+                          cotas: 1,
+                          month: monthKey
+                        });
+                        setSelectedDays([]);
+                    }}
+                    className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-              <form onSubmit={handleSave} className="p-6 space-y-6">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Selecionar Policial</label>
-                  
-                  {/* Searchable UI */}
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Pesquisar policial..."
-                        value={polySearch}
-                        onChange={(e) => setPolySearch(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-pmpe-navy/10 transition-all font-bold"
-                      />
-                    </div>
-                    
-                    <div className="max-h-[200px] overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50 bg-white">
-                      {policemen
-                        .filter(p => 
-                          p.nomeGuerra.toLowerCase().includes(polySearch.toLowerCase()) ||
-                          p.nomeCompleto.toLowerCase().includes(polySearch.toLowerCase()) ||
-                          p.matricula.includes(polySearch)
-                        )
-                        .map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => {
-                              setFormData({ ...formData, policemanId: p.id! });
-                              setPolySearch('');
-                            }}
-                            className={cn(
-                              "w-full px-3 py-2 text-left flex items-center justify-between hover:bg-slate-50 transition-colors group",
-                              formData.policemanId === p.id ? "bg-pmpe-navy/5 border-l-2 border-pmpe-navy" : ""
-                            )}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className={cn(
-                                "text-[11px] font-black uppercase leading-tight",
-                                formData.policemanId === p.id ? "text-pmpe-navy" : "text-slate-700"
-                              )}>
-                                {p.graduacaoPosto} {p.nomeGuerra}
-                              </p>
-                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Mat: {p.matricula}</p>
+                <form onSubmit={handleSave} className="flex flex-col md:flex-row h-[600px] md:h-auto">
+                    {/* Left Side: Volunteer Data */}
+                    <div className="p-6 space-y-6 flex-1 border-r border-slate-100 overflow-y-auto">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Selecionar Policial</label>
+                          
+                          <div className="space-y-2">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                              <input
+                                type="text"
+                                placeholder="Pesquisar policial..."
+                                value={polySearch}
+                                onChange={(e) => setPolySearch(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-pmpe-navy/10 transition-all font-bold"
+                              />
                             </div>
                             
-                            <div className="flex items-center gap-2">
-                              {p.isMotorista && (
-                                <span className={cn(
-                                  "flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter",
-                                  formData.policemanId === p.id ? "bg-pmpe-navy text-white" : "bg-purple-50 text-purple-600"
-                                )}>
-                                  <Car className="w-2.5 h-2.5" />
-                                  Mot.
-                                </span>
-                              )}
-                              {formData.policemanId === p.id && (
-                                <UserCheck className="w-3.5 h-3.5 text-pmpe-navy" />
-                              )}
+                            <div className="max-h-[160px] overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50 bg-white shadow-inner">
+                              {policemen
+                                .filter(p => 
+                                  p.nomeGuerra.toLowerCase().includes(polySearch.toLowerCase()) ||
+                                  p.nomeCompleto.toLowerCase().includes(polySearch.toLowerCase()) ||
+                                  p.matricula.includes(polySearch)
+                                )
+                                .map(p => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData({ ...formData, policemanId: p.id! });
+                                      setPolySearch('');
+                                    }}
+                                    className={cn(
+                                      "w-full px-3 py-2 text-left flex items-center justify-between hover:bg-slate-50 transition-colors group",
+                                      formData.policemanId === p.id ? "bg-pmpe-navy/5 border-l-2 border-pmpe-navy" : ""
+                                    )}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className={cn(
+                                        "text-[10px] font-black uppercase leading-tight",
+                                        formData.policemanId === p.id ? "text-pmpe-navy" : "text-slate-700"
+                                      )}>
+                                        {p.graduacaoPosto} {p.nomeGuerra}
+                                      </p>
+                                      <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter font-mono">Mat: {p.matricula}</p>
+                                    </div>
+                                    
+                                    {formData.policemanId === p.id && (
+                                      <UserCheck className="w-3.5 h-3.5 text-pmpe-navy" />
+                                    )}
+                                  </button>
+                                ))}
                             </div>
-                          </button>
-                        ))}
-                      {policemen.length > 0 && policemen.filter(p => 
-                        p.nomeGuerra.toLowerCase().includes(polySearch.toLowerCase()) ||
-                        p.nomeCompleto.toLowerCase().includes(polySearch.toLowerCase()) ||
-                        p.matricula.includes(polySearch)
-                      ).length === 0 && (
-                        <div className="p-4 text-center text-[10px] text-slate-400 font-bold tracking-widest uppercase italic">
-                          Nenhum policial encontrado
+                          </div>
                         </div>
-                      )}
+
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                              Quantidade de Cotas
+                            </label>
+                            <span className="text-xs font-black text-pmpe-navy bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{formData.cotas}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="1"
+                            max="12"
+                            value={formData.cotas}
+                            onChange={(e) => setFormData({...formData, cotas: parseInt(e.target.value)})}
+                            className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-pmpe-navy border border-slate-200"
+                          />
+                          <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-tight leading-relaxed italic">
+                            * O policial pode ter até 12 cotas de {type} por mês.
+                          </p>
+                        </div>
                     </div>
-                  </div>
-                </div>
 
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                      Quantidade de Cotas
-                    </label>
-                    <span className="text-xs font-black text-pmpe-navy bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{formData.cotas}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="12"
-                    value={formData.cotas}
-                    onChange={(e) => setFormData({...formData, cotas: parseInt(e.target.value)})}
-                    className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-pmpe-navy border border-slate-200"
-                  />
-                  <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-tight">* Limite mensal de 12 cotas.</p>
-                </div>
+                    {/* Right Side: Ordinary Schedule Calendar */}
+                    <div className="p-6 flex-1 bg-slate-50/50">
+                        <div className="flex flex-col h-full">
+                            <div className="mb-4">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <CalendarIcon className="w-4 h-4 text-pmpe-navy" />
+                                    <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-tight">Escala Ordinária (Restrições)</h4>
+                                </div>
+                                <p className="text-[10px] font-medium text-slate-500 leading-tight">Selecione os dias que este policial já possui serviço ordinário para evitar choques de escala.</p>
+                            </div>
 
-                <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                            <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm flex-1">
+                                <div className="grid grid-cols-7 gap-1 mb-2">
+                                    {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
+                                        <div key={i} className="text-center text-[9px] font-black text-slate-300 uppercase">{d}</div>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-7 gap-1">
+                                    {/* Padding for start of month */}
+                                    {Array.from({ length: getDay(startOfMonth(currentDate)) }).map((_, i) => (
+                                        <div key={`pad-${i}`} className="h-8" />
+                                    ))}
+                                    {eachDayOfInterval({
+                                        start: startOfMonth(currentDate),
+                                        end: endOfMonth(currentDate)
+                                    }).map(day => {
+                                        const d = getDate(day);
+                                        const isSelected = selectedDays.includes(d);
+                                        return (
+                                            <button
+                                                key={day.toISOString()}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (isSelected) {
+                                                        setSelectedDays(prev => prev.filter(dayNum => dayNum !== d));
+                                                    } else {
+                                                        setSelectedDays(prev => [...prev, d]);
+                                                    }
+                                                }}
+                                                className={cn(
+                                                    "h-8 rounded-lg text-[10px] font-black transition-all flex items-center justify-center relative",
+                                                    isSelected 
+                                                        ? "bg-pmpe-navy text-white shadow-md scale-105 z-10" 
+                                                        : "hover:bg-slate-100 text-slate-600"
+                                                )}
+                                            >
+                                                {d}
+                                                {isSelected && (
+                                                    <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-pmpe-gold rounded-full border-2 border-white" />
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="mt-4 flex items-start gap-2 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                                <AlertCircle className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                                <p className="text-[9px] text-blue-700 font-bold uppercase tracking-tight leading-normal">
+                                    Os dias marcados ficarão bloqueados para alocação automática deste policial.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 px-6">
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all"
+                    onClick={() => {
+                        setIsModalOpen(false);
+                        setEditingId(null);
+                        setFormData({
+                          policemanId: '',
+                          type: type,
+                          cotas: 1,
+                          month: monthKey
+                        });
+                        setSelectedDays([]);
+                    }}
+                    className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all font-sans"
                   >
                     Cancelar
                   </button>
                   <button
-                    type="submit"
-                    className="px-6 py-2 bg-pmpe-navy text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2"
+                    onClick={handleSave}
+                    className="px-8 py-2 bg-pmpe-navy text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-800 transition-all shadow-md flex items-center gap-2 font-sans"
                   >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Salvar Dados</span>
+                    <Save className="w-3.5 h-3.5 text-pmpe-gold" />
+                    <span>Confirmar Voluntariado</span>
                   </button>
                 </div>
-              </form>
-            </motion.div>
+              </motion.div>
           </div>
         )}
       </AnimatePresence>
