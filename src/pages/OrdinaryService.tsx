@@ -51,14 +51,19 @@ const OrdinaryService = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch all active policemen
-      const pSnapshot = await getDocs(query(collection(db, 'policemen'), where('situacao', '==', 'ATIVO')));
+      // Fetch all policemen to ensure volunteers are included even if not marked ATIVO
+      const pSnapshot = await getDocs(collection(db, 'policemen'));
       const pList = pSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Policeman));
-      pList.sort((a, b) => a.antiguidade - b.antiguidade);
+      // Sort by antiguidade, but prioritize ATIVO
+      pList.sort((a, b) => {
+        if (a.situacao === 'ATIVO' && b.situacao !== 'ATIVO') return -1;
+        if (a.situacao !== 'ATIVO' && b.situacao === 'ATIVO') return 1;
+        return a.antiguidade - b.antiguidade;
+      });
       setPolicemen(pList);
 
-      // Fetch all volunteers
-      const vSnapshot = await getDocs(collection(db, 'volunteers'));
+      // Fetch volunteers for this specific month
+      const vSnapshot = await getDocs(query(collection(db, 'volunteers'), where('month', '==', monthKey)));
       const vList = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Volunteer));
       setVolunteers(vList);
 
@@ -93,7 +98,9 @@ const OrdinaryService = () => {
       const { writeBatch } = await import('firebase/firestore');
       const batch = writeBatch(db);
 
-      // We only save entries that have at least one day
+      // We only save entries that have at least one day or exist already
+      // To be safe and clean up, we can also delete empty ones if needed, 
+      // but batch.set with merge is fine.
       Object.entries(schedules).forEach(([policemanId, days]) => {
         const id = `${policemanId}_${monthKey}`;
         const docRef = doc(db, 'ordinarySchedules', id);
@@ -118,8 +125,12 @@ const OrdinaryService = () => {
   const filteredPolicemen = policemen.filter(p => {
     const matchesSearch = p.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || p.matricula.includes(searchTerm);
     const isVolunteer = volunteers.some(v => v.policemanId === p.id);
+    
+    // Only show active policemen OR volunteers of the month
+    const isRelevant = p.situacao === 'ATIVO' || isVolunteer;
+    
     if (filterVolunteers) return matchesSearch && isVolunteer;
-    return matchesSearch;
+    return matchesSearch && isRelevant;
   });
 
   if (loading && policemen.length === 0) {

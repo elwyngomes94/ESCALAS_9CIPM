@@ -25,21 +25,6 @@ export default defineConfig(({mode}) => {
       outDir: 'dist',
       sourcemap: false,
       chunkSizeWarningLimit: 3000,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('firebase')) return 'vendor-firebase';
-              if (id.includes('lucide-react')) return 'vendor-lucide';
-              if (id.includes('date-fns')) return 'vendor-date-fns';
-              if (id.includes('jspdf') || id.includes('xlsx') || id.includes('html2canvas')) return 'vendor-utils';
-              if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
-              if (id.includes('react')) return 'vendor-react';
-              return 'vendor-base';
-            }
-          },
-        },
-      },
     },
     server: {
       port: 3000,

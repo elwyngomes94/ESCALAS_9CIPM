@@ -29,6 +29,7 @@ export interface Volunteer {
   policemanId: string;
   type: 'PJES' | 'OPS';
   cotas: number;
+  month: string; // YYYY-MM
   createdAt?: any;
 }
 

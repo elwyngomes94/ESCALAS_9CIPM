@@ -92,7 +92,11 @@ const CreateEscala = () => {
       const mKey = format(dateObj, 'yyyy-MM');
 
       try {
-        const vQ = query(collection(db, 'volunteers'), where('type', '==', selectedService.tipo));
+        const vQ = query(
+          collection(db, 'volunteers'), 
+          where('type', '==', selectedService.tipo),
+          where('month', '==', mKey)
+        );
         const vSnap = await getDocs(vQ);
         
         // Fetch existing scales for this service to highlight occupied days in calendar

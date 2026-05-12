@@ -21,6 +21,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/login" element={<Login />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/escalas" element={<Escalas />} />
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/voluntarios-ops" element={<VolunteersOPS />} />
             <Route path="/criar-escala" element={<CreateEscala />} />
             <Route path="/escala-ordinaria" element={<OrdinaryService />} />
+            <Route path="/relatorios" element={<Navigate to="/escalas" replace />} />
           </Route>
           
           <Route path="*" element={<Navigate to="/" replace />} />
