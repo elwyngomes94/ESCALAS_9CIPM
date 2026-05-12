@@ -286,12 +286,14 @@ const Escalas = () => {
     return escalas.filter(esc => {
       const escDate = esc.date.toDate();
       const escDateStr = format(escDate, 'yyyy-MM-dd');
+      const configDateObj = new Date(reportConfig.date.length === 7 ? reportConfig.date + '-01' : reportConfig.date);
       
       if (reportConfig.scope === 'DAY') {
-        return escDateStr === reportConfig.date;
+        const configDateStr = format(configDateObj, 'yyyy-MM-dd');
+        return escDateStr === configDateStr;
       }
       if (reportConfig.scope === 'MONTH') {
-        return format(escDate, 'yyyy-MM') === format(new Date(reportConfig.date + '-01'), 'yyyy-MM');
+        return format(escDate, 'yyyy-MM') === format(configDateObj, 'yyyy-MM');
       }
       if (reportConfig.scope === 'FILTERED') {
         const matchesDate = filterDate ? escDateStr === filterDate : true;
@@ -307,6 +309,8 @@ const Escalas = () => {
   const exportBatchExcel = () => {
     const reportScales = getReportScales();
     if (reportScales.length === 0) return alert('Nenhuma escala para exportar.');
+
+    const configDateObj = new Date(reportConfig.date.length === 7 ? reportConfig.date + '-01' : reportConfig.date);
 
     if (reportConfig.mode === 'SEI') {
       const data = reportScales.flatMap(esc => 
@@ -325,15 +329,15 @@ const Escalas = () => {
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Escalas");
-      XLSX.writeFile(wb, `Relatorio_Escalas_${reportConfig.scope}_${reportConfig.date}.xlsx`);
+      XLSX.writeFile(wb, `Relatorio_Escalas_${reportConfig.scope}_${format(configDateObj, 'yyyy-MM-dd')}.xlsx`);
     } else {
       // Matrix Excel
       const pSnap = escalas.flatMap(e => e.policemen || []);
       const uniqueP = Array.from(new Set(pSnap.map(p => p.id))).map(id => pSnap.find(p => p.id === id)!);
       
       const days = eachDayOfInterval({
-        start: startOfMonth(new Date(reportConfig.date + '-01')),
-        end: endOfMonth(new Date(reportConfig.date + '-01'))
+        start: startOfMonth(configDateObj),
+        end: endOfMonth(configDateObj)
       });
 
       const rows = uniqueP.map(p => {
@@ -349,7 +353,7 @@ const Escalas = () => {
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Mapa Mensal");
-      XLSX.writeFile(wb, `Mapa_Mensal_${reportConfig.date}.xlsx`);
+      XLSX.writeFile(wb, `Mapa_Mensal_${format(configDateObj, 'yyyy-MM')}.xlsx`);
     }
   };
 
@@ -477,6 +481,7 @@ const Escalas = () => {
             {isAdmin && (
               <div className="flex items-center gap-2">
                 <button
+                  id="open-report-modal-btn"
                   onClick={() => setIsReportModalOpen(true)}
                   className="px-3 py-1.5 text-[9px] font-black text-white uppercase tracking-widest bg-pmpe-navy rounded-lg shadow-sm hover:bg-slate-800 transition-all flex items-center gap-2"
                 >
@@ -1031,8 +1036,9 @@ const Escalas = () => {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Modelo de Visualização</label>
-                        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                        <div id="report-mode-selector" className="flex gap-2 p-1 bg-slate-100 rounded-xl">
                           <button 
+                            id="report-mode-sei-btn"
                             onClick={() => setReportConfig({...reportConfig, mode: 'SEI'})}
                             className={cn(
                               "flex-1 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
@@ -1042,6 +1048,7 @@ const Escalas = () => {
                             Padrão SEI
                           </button>
                           <button 
+                            id="report-mode-matrix-btn"
                             onClick={() => setReportConfig({...reportConfig, mode: 'MATRIX'})}
                             className={cn(
                               "flex-1 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
@@ -1055,10 +1062,11 @@ const Escalas = () => {
 
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Escopo do Relatório</label>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div id="report-scope-selector" className="grid grid-cols-3 gap-2">
                           {(['DAY', 'MONTH', 'FILTERED'] as const).map(s => (
                             <button
                               key={s}
+                              id={`report-scope-${s.toLowerCase()}-btn`}
                               onClick={() => setReportConfig({...reportConfig, scope: s})}
                               className={cn(
                                 "px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all",
@@ -1080,8 +1088,9 @@ const Escalas = () => {
                               {reportConfig.scope === 'DAY' ? 'Data de Referência' : 'Mês de Referência'}
                             </label>
                             <input
+                              id="report-date-input"
                               type={reportConfig.scope === 'DAY' ? "date" : "month"}
-                              value={reportConfig.date}
+                              value={reportConfig.scope === 'MONTH' && reportConfig.date.length > 7 ? reportConfig.date.substring(0, 7) : reportConfig.date}
                               onChange={(e) => setReportConfig({...reportConfig, date: e.target.value})}
                               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-1 focus:ring-pmpe-navy outline-none"
                             />
@@ -1256,8 +1265,8 @@ const Escalas = () => {
                  <tr>
                     <th className="border-2 border-slate-800 p-2 bg-slate-800 text-white text-[10px] uppercase font-black min-w-[150px]">Policial</th>
                     {eachDayOfInterval({
-                      start: startOfMonth(new Date(reportConfig.date + '-01')),
-                      end: endOfMonth(new Date(reportConfig.date + '-01'))
+                      start: startOfMonth(new Date(reportConfig.date.length === 7 ? reportConfig.date + '-01' : reportConfig.date)),
+                      end: endOfMonth(new Date(reportConfig.date.length === 7 ? reportConfig.date + '-01' : reportConfig.date))
                     }).map(day => (
                       <th key={day.toISOString()} className="border-2 border-slate-300 p-1 w-8 text-[9px] font-black uppercase bg-slate-50">
                         {getDate(day)}
@@ -1273,8 +1282,8 @@ const Escalas = () => {
                       <tr key={pid}>
                          <td className="border-2 border-slate-300 p-2 text-[10px] font-bold">{poly.graduacaoPosto} {poly.nomeGuerra}</td>
                          {eachDayOfInterval({
-                            start: startOfMonth(new Date(reportConfig.date + '-01')),
-                            end: endOfMonth(new Date(reportConfig.date + '-01'))
+                            start: startOfMonth(new Date(reportConfig.date.length === 7 ? reportConfig.date + '-01' : reportConfig.date)),
+                            end: endOfMonth(new Date(reportConfig.date.length === 7 ? reportConfig.date + '-01' : reportConfig.date))
                           }).map(day => {
                             const esc = getReportScales().find(e => isSameDay(e.date.toDate(), day) && e.policemenIds.includes(pid));
                             return (
