@@ -24,7 +24,7 @@ import {
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
-import { handleFirestoreError, OperationType } from '../lib/firebase';
+import { handleFirestoreError, OperationType, cn } from '../lib/utils';
 
 const OrdinaryService = () => {
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,7 @@ const OrdinaryService = () => {
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [schedules, setSchedules] = useState<Record<string, number[]>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterVolunteers, setFilterVolunteers] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -114,10 +115,12 @@ const OrdinaryService = () => {
     }
   };
 
-  const filteredPolicemen = policemen.filter(p => 
-    p.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.matricula.includes(searchTerm)
-  );
+  const filteredPolicemen = policemen.filter(p => {
+    const matchesSearch = p.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || p.matricula.includes(searchTerm);
+    const isVolunteer = volunteers.some(v => v.policemanId === p.id);
+    if (filterVolunteers) return matchesSearch && isVolunteer;
+    return matchesSearch;
+  });
 
   if (loading && policemen.length === 0) {
     return (
@@ -192,13 +195,27 @@ const OrdinaryService = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button
-          onClick={saveSchedules}
-          disabled={saving}
-          className="px-8 py-3 bg-pmpe-navy text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-pmpe-navy/20 hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-        >
-          {saving ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setFilterVolunteers(!filterVolunteers)}
+            className={cn(
+              "px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all flex items-center gap-2",
+              filterVolunteers 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm" 
+                : "bg-white border-slate-200 text-slate-400 hover:text-slate-600"
+            )}
+          >
+            <UserCheck className="w-4 h-4" />
+            {filterVolunteers ? 'Apenas Voluntários' : 'Filtrar Voluntários'}
+          </button>
+          <button
+            onClick={saveSchedules}
+            disabled={saving}
+            className="px-8 py-3 bg-pmpe-navy text-white rounded-xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-pmpe-navy/20 hover:bg-slate-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+          >
+            {saving ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
+          </button>
+        </div>
       </div>
 
       {/* Grid Container - Horizontal scroll for days */}
@@ -288,10 +305,5 @@ const OrdinaryService = () => {
     </div>
   );
 };
-
-// Simple utility for CN
-function cn(...classes: any[]) {
-  return classes.filter(Boolean).join(' ');
-}
 
 export default OrdinaryService;
