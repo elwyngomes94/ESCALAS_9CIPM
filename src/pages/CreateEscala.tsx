@@ -184,10 +184,16 @@ const CreateEscala = () => {
       return escDateStr === dateStr && esc.policemenIds.includes(policemanId);
     });
 
+    // Check monthly volunteer limits (cotas used)
+    const vol = volunteers.find(v => v.policemanId === policemanId);
+    const totalExtrasInMonth = allEscalasOfMonth.filter(esc => esc.policemenIds.includes(policemanId)).length;
+    const quotaReached = vol ? totalExtrasInMonth >= vol.cotas : false;
+
     return {
       isOrdinary,
       hasExtra: extraScalesOnDay.length > 0,
-      totalExtrasInMonth: allEscalasOfMonth.filter(esc => esc.policemenIds.includes(policemanId)).length
+      totalExtrasInMonth,
+      quotaReached
     };
   };
 
@@ -199,10 +205,18 @@ const CreateEscala = () => {
       return !conflicts.isOrdinary && !conflicts.hasExtra;
     });
 
+    // Intelligent fair distribution
     availableVolunteers.sort((a, b) => {
-      const cA = getDayConflicts(a.policemanId, formData.date).totalExtrasInMonth;
-      const cB = getDayConflicts(b.policemanId, formData.date).totalExtrasInMonth;
-      return cA - cB;
+      const conflictsA = getDayConflicts(a.policemanId, formData.date);
+      const conflictsB = getDayConflicts(b.policemanId, formData.date);
+      
+      // Prioritize who has fewer extras this month (fairness)
+      if (conflictsA.totalExtrasInMonth !== conflictsB.totalExtrasInMonth) {
+        return conflictsA.totalExtrasInMonth - conflictsB.totalExtrasInMonth;
+      }
+      
+      // Secondary: Seniority (antiguidade) - just an example of tie-breaker
+      return (a.policeman?.antiguidade || 0) - (b.policeman?.antiguidade || 0);
     });
 
     const suggestedIds = availableVolunteers.slice(0, 4).map(v => v.policemanId);
@@ -514,7 +528,7 @@ const CreateEscala = () => {
                   .map(v => {
                     const conflicts = getDayConflicts(v.policemanId, formData.date);
                     const isSelected = formData.selectedPoliceIds.includes(v.policemanId);
-                    const isBlocked = conflicts.isOrdinary;
+                    const isBlocked = conflicts.isOrdinary || conflicts.quotaReached;
 
                     return (
                       <button
@@ -522,7 +536,7 @@ const CreateEscala = () => {
                         disabled={isBlocked && !isSelected}
                         onClick={() => togglePolice(v.policemanId)}
                         className={cn(
-                          "p-3 rounded-xl border text-left flex flex-col justify-between h-28 transition-all relative overflow-hidden group",
+                          "p-3 rounded-xl border text-left flex flex-col justify-between h-32 transition-all relative overflow-hidden group",
                           isSelected 
                             ? "bg-pmpe-navy border-pmpe-navy shadow-inner" 
                             : isBlocked 
@@ -539,9 +553,12 @@ const CreateEscala = () => {
                               {isBlocked && !isSelected && <AlertCircle className="w-3 h-3 text-red-500" />}
                             </div>
                             <div className="flex flex-col items-end">
-                               {conflicts.totalExtrasInMonth > 0 && !isSelected && (
-                                 <span className="text-[7px] font-black text-slate-300 uppercase tracking-tighter">MÊS: {conflicts.totalExtrasInMonth}X</span>
-                               )}
+                               <div className={cn(
+                                 "text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter",
+                                 isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                               )}>
+                                 Cotas: {conflicts.totalExtrasInMonth}/{v.cotas}
+                               </div>
                                {v.policeman?.isMotorista && <Car className={cn("w-3.5 h-3.5 mt-1", isSelected ? "text-pmpe-gold" : "text-purple-400")} />}
                             </div>
                          </div>
@@ -553,13 +570,12 @@ const CreateEscala = () => {
                             <p className={cn("text-[11px] font-black uppercase truncate", isSelected ? "text-white" : "text-slate-800")}>
                                {v.policeman?.nomeGuerra}
                             </p>
-                            <p className={cn("text-[8px] font-bold text-slate-400", isSelected && "text-white/40")}>Mat: {v.policeman?.matricula}</p>
                          </div>
 
                          {isBlocked && !isSelected && (
                            <div className="absolute inset-0 bg-red-100/10 flex items-center justify-center p-2">
                              <div className="bg-red-600 text-white text-[7px] font-black uppercase tracking-widest px-2 py-0.5 rounded shadow-lg transform -rotate-12">
-                               IMPEDIDO: ORDINÁRIA
+                               {conflicts.isOrdinary ? 'IMPEDIDO: ORDINÁRIA' : 'LIMITE DE COTAS'}
                              </div>
                            </div>
                          )}

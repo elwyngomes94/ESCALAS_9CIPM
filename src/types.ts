@@ -1,3 +1,11 @@
+export interface QuotaSettings {
+  id?: string;
+  month: string; // YYYY-MM
+  pjesTotal: number;
+  opsTotal: number;
+  updatedAt?: any;
+}
+
 export interface Policeman {
   id?: string;
   nomeCompleto: string;
@@ -9,6 +17,8 @@ export interface Policeman {
   telefone: string;
   isMotorista?: boolean;
   situacao: string;
+  pjesCotasMax: number;
+  opsCotasMax: number;
   createdAt?: any;
 }
 

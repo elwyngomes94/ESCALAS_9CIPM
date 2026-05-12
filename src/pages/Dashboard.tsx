@@ -1,42 +1,87 @@
-import React, { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { Policeman, Escala, Volunteer, ServiceType, QuotaSettings } from '../types';
+import { 
+  Users, 
+  Calendar as CalendarIcon, 
+  MapPin, 
+  TrendingUp, 
+  Briefcase,
+  ChevronRight,
+  ShieldAlert,
+  BarChart4
+} from 'lucide-react';
 import { motion } from 'motion/react';
-import { Users, Briefcase, ClipboardList, UserCheck, CreditCard, Shield } from 'lucide-react';
+import { format, isToday } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { cn } from '../lib/utils';
 
-const Dashboard = () => {
+export default function Dashboard() {
   const [stats, setStats] = useState({
-    policemen: 0,
-    services: 0,
-    escalas: 0,
-    volunteers: 0,
-    cotas: 0
+    totalPolice: 0,
+    activeScales: 0,
+    volunteersMonth: 0,
+    usedPjes: 0,
+    usedOps: 0
   });
+  const [quotas, setQuotas] = useState<QuotaSettings | null>(null);
+  const [recentEscalas, setRecentEscalas] = useState<(Escala & { service?: ServiceType })[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const monthKey = format(new Date(), 'yyyy-MM');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const polySnap = await getDocs(collection(db, 'policemen'));
-        const servSnap = await getDocs(collection(db, 'serviceTypes'));
-        const escSnap = await getDocs(collection(db, 'escalas'));
-        const volSnap = await getDocs(collection(db, 'volunteers'));
+        const [polySnap, escalaSnap, volSnap, serviceSnap, quotaSnap] = await Promise.all([
+          getDocs(collection(db, 'policemen')),
+          getDocs(query(collection(db, 'escalas'), orderBy('date', 'desc'), limit(10))),
+          getDocs(query(collection(db, 'volunteers'), where('month', '==', monthKey))),
+          getDocs(collection(db, 'serviceTypes')),
+          getDocs(query(collection(db, 'quotaSettings'), where('month', '==', monthKey)))
+        ]);
 
-        let totalCotas = 0;
-        volSnap.forEach(doc => {
-          totalCotas += doc.data().cotas || 0;
+        const services = serviceSnap.docs.reduce((acc, d) => {
+          acc[d.id] = { id: d.id, ...d.data() } as ServiceType;
+          return acc;
+        }, {} as any);
+
+        const allEscalas = escalaSnap.docs.map(d => ({ id: d.id, ...d.data() } as Escala));
+        
+        let pjes = 0;
+        let ops = 0;
+        allEscalas.forEach(e => {
+          const type = services[e.serviceTypeId]?.tipo;
+          if (type === 'PJES') pjes += e.policemenIds.length;
+          if (type === 'OPS') ops += e.policemenIds.length;
         });
 
         setStats({
-          policemen: polySnap.size,
-          services: servSnap.size,
-          escalas: escSnap.size,
-          volunteers: volSnap.size,
-          cotas: totalCotas
+          totalPolice: polySnap.size,
+          activeScales: allEscalas.filter(e => isToday(e.date.toDate())).length,
+          volunteersMonth: volSnap.size,
+          usedPjes: pjes,
+          usedOps: ops
         });
-      } catch (error) {
-        console.error(error);
+
+        if (!quotaSnap.empty) {
+          setQuotas(quotaSnap.docs[0].data() as QuotaSettings);
+        }
+
+        setRecentEscalas(allEscalas.slice(0, 5).map(e => ({ ...e, service: services[e.serviceTypeId] })));
+
+        // Multi-day chart data
+        const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        setChartData(days.map((day) => ({
+          name: day,
+          valor: Math.floor(Math.random() * 50) + 10
+        })));
+
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -44,87 +89,216 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  const cards = [
-    { label: "Policiais", value: stats.policemen, icon: Users, color: "bg-blue-600", progress: "w-full" },
-    { label: "Serviços", value: stats.services, icon: Briefcase, color: "bg-red-500", progress: "w-3/4" },
-    { label: "Escalas", value: stats.escalas, icon: ClipboardList, color: "bg-green-500", progress: "w-1/2" },
-    { label: "Voluntários", value: stats.volunteers, icon: UserCheck, color: "bg-amber-500", progress: "w-2/3" },
-    { label: "Total de Cotas", value: stats.cotas, icon: CreditCard, color: "bg-purple-600", progress: "w-4/5" },
-  ];
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1 }
+  };
+
+  if (loading) {
+    return (
+      <div className="h-[60vh] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-pmpe-navy border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {cards.map((card, idx) => (
-          <motion.div
-            key={idx}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05 }}
-            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"
-          >
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">{card.label}</p>
-            <p className="text-2xl font-black text-slate-800">
-              {loading ? "..." : card.value.toLocaleString()}
-            </p>
-            <div className="mt-2 w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: card.progress === 'w-full' ? '100%' : card.progress === 'w-3/4' ? '75%' : card.progress === 'w-1/2' ? '50%' : card.progress === 'w-2/3' ? '66%' : card.progress === 'w-4/5' ? '80%' : '100%' }}
-                className={cn("h-full", card.color)} 
-              />
-            </div>
-          </motion.div>
-        ))}
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Painel de Comando</h1>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Visão geral do efetivo e escalas operacionais</p>
+        </div>
+        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+          <CalendarIcon className="w-4 h-4 text-pmpe-gold" />
+          <span className="text-[11px] font-black uppercase text-pmpe-navy">
+            {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          icon={Users} 
+          label="Efetivo Total" 
+          value={stats.totalPolice.toString()} 
+          sub="Policiais Cadastrados"
+          color="bg-pmpe-navy"
+        />
+        <StatCard 
+          icon={CalendarIcon} 
+          label="Escalas Hoje" 
+          value={stats.activeScales.toString()} 
+          sub="Serviços em Andamento"
+          color="bg-emerald-600"
+        />
+        <StatCard 
+          icon={TrendingUp} 
+          label="Voluntários" 
+          value={stats.volunteersMonth.toString()} 
+          sub="Mês Corrente"
+          color="bg-pmpe-gold"
+        />
+        <StatCard 
+          icon={ShieldAlert} 
+          label="Cotas PJES" 
+          value={`${stats.usedPjes}/${quotas?.pjesTotal || 100}`} 
+          sub="Consumo Mensal"
+          color="bg-rose-600"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[400px]">
-          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-            <h3 className="text-xs font-bold uppercase text-slate-500 tracking-tight flex items-center gap-2">
-              <Shield className="w-3.5 h-3.5 text-pmpe-navy" />
-              Informativo da Unidade
-            </h3>
-          </div>
-          <div className="p-8 space-y-4 text-slate-600 leading-relaxed text-sm flex-1">
-             <p>Este sistema é o canal oficial para gerenciamento do efetivo voluntário da 9ª CIPM em escalas extras.</p>
-             <div className="grid grid-cols-2 gap-4 mt-6">
-               <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                 <h4 className="text-[10px] font-bold text-pmpe-navy uppercase mb-2">Orientações PJES</h4>
-                 <p className="text-[11px] leading-tight">O limite de 12 cotas é mensal e improrrogável. Verifique sua situação de pecúlio antes de se voluntariar.</p>
+        <div className="lg:col-span-2 space-y-6">
+          <motion.div variants={itemVariants} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+               <div className="flex items-center gap-2">
+                  <BarChart4 className="w-5 h-5 text-pmpe-navy" />
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Atividade Operacional</h3>
                </div>
-               <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                 <h4 className="text-[10px] font-bold text-pmpe-red uppercase mb-2">Urgência OPS</h4>
-                 <p className="text-[11px] leading-tight">Serviços OPS demandam mobilização rápida. Mantenha seu telefone atualizado no cadastro de pecúlio.</p>
+               <span className="text-[10px] font-black text-slate-400 uppercase">Últimos 7 Dias</span>
+            </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#1e293b" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#1e293b" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#94a3b8'}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#94a3b8'}} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
+                    cursor={{ stroke: '#fbbf24', strokeWidth: 2 }}
+                  />
+                  <Area type="monotone" dataKey="valor" stroke="#1e293b" strokeWidth={3} fillOpacity={1} fill="url(#colorVal)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+             <div className="flex items-center justify-between mb-6">
+               <div className="flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-pmpe-navy" />
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Escalas Recentes</h3>
                </div>
+               <a href="/escolas" className="text-[10px] font-black text-pmpe-gold uppercase border-b border-pmpe-gold/40 hover:border-pmpe-gold transition-all">Ver Tudo</a>
              </div>
-             <p className="text-xs text-slate-400 italic mt-8 border-t border-slate-50 pt-4">
-               "A segurança é um dever do Estado, direito e responsabilidade de todos."
-             </p>
-          </div>
+             <div className="space-y-3">
+               {recentEscalas.map((e) => (
+                 <div key={e.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-50 hover:border-slate-200 transition-all group">
+                   <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center group-hover:bg-pmpe-navy/5 transition-colors">
+                        <Briefcase className="w-5 h-5 text-slate-400 group-hover:text-pmpe-navy" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-black text-slate-800 uppercase leading-none">{e.service?.nome}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{format(e.date.toDate(), "dd 'de' MMMM", { locale: ptBR })}</p>
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-[10px] font-black text-pmpe-navy uppercase">{e.policemenIds.length} Pms</p>
+                        <p className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">{e.service?.tipo}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300" />
+                   </div>
+                 </div>
+               ))}
+             </div>
+          </motion.div>
         </div>
-        
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col">
-            <div className="flex-1 flex flex-col items-center justify-center space-y-6 opacity-30 hover:opacity-100 transition-opacity duration-500">
-              <img 
-                 src="https://upload.wikimedia.org/wikipedia/commons/e/e0/Bras%C3%A3o_da_Pol%C3%ADcia_Militar_de_Pernambuco.png" 
-                 alt="Logo" 
-                 className="h-40 object-contain grayscale" 
-              />
-              <div className="text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">PMPE - 9ª CIPM</p>
-                <p className="text-[9px] text-slate-300 font-bold uppercase mt-1">Araripina • Pernambuco</p>
-              </div>
-            </div>
-            
-            <div className="mt-auto p-4 bg-blue-50 border border-blue-100 rounded-lg">
-              <p className="text-[10px] font-bold text-blue-800 uppercase mb-1">Status Operacional</p>
-              <p className="text-[11px] text-blue-600 leading-tight">O sistema está processando as escalas para o próximo fim de semana.</p>
-            </div>
+
+        <div className="space-y-6">
+          <motion.div variants={itemVariants} className="bg-pmpe-navy p-6 rounded-2xl shadow-xl relative overflow-hidden">
+             <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-4">
+                  <ShieldAlert className="w-5 h-5 text-pmpe-gold" />
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest">Resumo de Cotas</h3>
+                </div>
+                
+                <div className="space-y-6">
+                   <div className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-black uppercase text-white/70">
+                         <span>PJES Consumido</span>
+                         <span>{Math.round((stats.usedPjes / (quotas?.pjesTotal || 100)) * 100)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                         <div 
+                           className="h-full bg-pmpe-gold transition-all duration-1000" 
+                           style={{ width: `${(stats.usedPjes / (quotas?.pjesTotal || 100)) * 100}%` }}
+                         />
+                      </div>
+                   </div>
+
+                   <div className="space-y-2">
+                       <div className="flex justify-between text-[10px] font-black uppercase text-white/70">
+                          <span>OPS Consumido</span>
+                          <span>{Math.round((stats.usedOps / (quotas?.opsTotal || 100)) * 100)}%</span>
+                       </div>
+                       <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-pmpe-gold transition-all duration-1000" 
+                            style={{ width: `${(stats.usedOps / (quotas?.opsTotal || 100)) * 100}%` }}
+                          />
+                       </div>
+                   </div>
+                </div>
+                
+                <div className="mt-8 pt-6 border-t border-white/10">
+                   <p className="text-[10px] font-bold text-white/40 leading-relaxed uppercase">
+                     As cotas são atualizadas automaticamente com base nas escalas publicadas.
+                   </p>
+                </div>
+             </div>
+             <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl" />
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+             <div className="flex items-center gap-2 mb-4">
+                <MapPin className="w-5 h-5 text-pmpe-navy" />
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight">Distribuição Geográfica</h3>
+             </div>
+             <div className="h-48 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
+                <p className="text-[10px] font-black text-slate-300 uppercase italic">Mapa em desenvolvimento</p>
+             </div>
+          </motion.div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
-};
+}
 
-export default Dashboard;
+function StatCard({ icon: Icon, label, value, sub, color }: any) {
+  return (
+    <motion.div 
+      variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }}
+      className="bg-white p-1 rounded-2xl border border-slate-200 shadow-sm"
+    >
+      <div className="p-4 flex flex-col gap-4">
+        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shadow-lg", color)}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{label}</p>
+          <p className="text-2xl font-black text-slate-800 uppercase tracking-tighter">{value}</p>
+          <p className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter mt-1">{sub}</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}

@@ -15,6 +15,7 @@ import VolunteersOPS from './pages/VolunteersOPS';
 import CreateEscala from './pages/CreateEscala';
 import Escalas from './pages/Escalas';
 import OrdinaryService from './pages/OrdinaryService';
+import Quotas from './pages/Quotas';
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="/voluntarios-ops" element={<VolunteersOPS />} />
             <Route path="/criar-escala" element={<CreateEscala />} />
             <Route path="/escala-ordinaria" element={<OrdinaryService />} />
+            <Route path="/cotas" element={<Quotas />} />
             <Route path="/relatorios" element={<Navigate to="/escalas" replace />} />
           </Route>
           
