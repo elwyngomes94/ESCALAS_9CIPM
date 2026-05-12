@@ -10,7 +10,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Policeman, OrdinarySchedule } from '../types';
+import { Policeman, OrdinarySchedule, Volunteer } from '../types';
 import { 
   Calendar as CalendarIcon, 
   Search, 
@@ -18,7 +18,8 @@ import {
   ChevronRight,
   Info,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  UserCheck
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -29,6 +30,7 @@ const OrdinaryService = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [policemen, setPolicemen] = useState<Policeman[]>([]);
+  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [schedules, setSchedules] = useState<Record<string, number[]>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -53,6 +55,11 @@ const OrdinaryService = () => {
       const pList = pSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Policeman));
       pList.sort((a, b) => a.antiguidade - b.antiguidade);
       setPolicemen(pList);
+
+      // Fetch all volunteers
+      const vSnapshot = await getDocs(collection(db, 'volunteers'));
+      const vList = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Volunteer));
+      setVolunteers(vList);
 
       // Fetch schedules for this month
       const sSnapshot = await getDocs(query(collection(db, 'ordinarySchedules'), where('month', '==', monthKey)));
@@ -160,6 +167,16 @@ const OrdinaryService = () => {
         <div className="text-[11px] text-blue-800 leading-relaxed">
           <p className="font-bold uppercase tracking-tight mb-1">Por que definir o serviço ordinário?</p>
           <p>Ao definir os dias de serviço regular, o sistema impedirá que este policial seja selecionado para escalas extras (GJ) nestes mesmos dias, garantindo o tempo de descanso e evitando erros operacionais.</p>
+          <div className="flex gap-4 mt-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="font-bold">Voluntário PJES</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-500" />
+              <span className="font-bold">Voluntário OPS</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -206,7 +223,15 @@ const OrdinaryService = () => {
                   <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-all group">
                     <td className="sticky left-0 bg-white group-hover:bg-slate-50 z-10 px-6 py-3 border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
                       <div className="flex flex-col">
-                        <span className="text-[11px] font-bold text-pmpe-navy">{p.graduacaoPosto} {p.nomeGuerra}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-pmpe-navy">{p.graduacaoPosto} {p.nomeGuerra}</span>
+                          {volunteers.some(v => v.policemanId === p.id && v.type === 'PJES') && (
+                            <span title="Voluntário PJES" className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                          )}
+                          {volunteers.some(v => v.policemanId === p.id && v.type === 'OPS') && (
+                            <span title="Voluntário OPS" className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                          )}
+                        </div>
                         <span className="text-[9px] text-slate-400 font-bold">{p.matricula}</span>
                       </div>
                     </td>
