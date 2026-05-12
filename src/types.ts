@@ -16,6 +16,7 @@ export interface Policeman {
   antiguidade: number;
   telefone: string;
   isMotorista?: boolean;
+  pelotao: string;
   situacao: string;
   pjesCotasMax: number;
   opsCotasMax: number;

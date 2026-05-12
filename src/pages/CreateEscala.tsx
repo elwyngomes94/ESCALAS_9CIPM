@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   collection, 
   getDocs, 
@@ -8,7 +8,9 @@ import {
   where,
   orderBy,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  deleteDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { Policeman, ServiceType, Volunteer, Escala } from '../types';
@@ -20,274 +22,203 @@ import {
   Search, 
   X, 
   Save, 
-  Calendar,
+  Calendar as CalendarIcon,
   Briefcase,
   Users,
   CheckCircle2,
   AlertCircle,
   Clock,
   Car,
-  Crown
+  Crown,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  UserPlus,
+  ArrowRightLeft,
+  Trash2,
+  Shield,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, isSameDay, getDay } from 'date-fns';
+import { 
+  format, 
+  startOfMonth, 
+  endOfMonth, 
+  eachDayOfInterval, 
+  getDate, 
+  isSameDay, 
+  getDay,
+  parseISO,
+  addMonths,
+  subMonths
+} from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+// FullCalendar
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import interactionPlugin, { Draggable } from '@fullcalendar/interaction';
+import listPlugin from '@fullcalendar/list';
 
 const CreateEscala = () => {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
   const [services, setServices] = useState<ServiceType[]>([]);
   const [volunteers, setVolunteers] = useState<(Volunteer & { policeman?: Policeman })[]>([]);
-  const [existingScales, setExistingScales] = useState<Escala[]>([]);
+  const [allEscalasOfMonth, setAllEscalasOfMonth] = useState<(Escala & { service?: ServiceType })[]>([]);
+  const [ordinarySchedules, setOrdinarySchedules] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-
-  const [isMonthlyMode, setIsMonthlyMode] = useState(false);
-  const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [ordinarySchedules, setOrdinarySchedules] = useState<Record<string, number[]>>({});
-  const [allEscalasOfMonth, setAllEscalasOfMonth] = useState<Escala[]>([]);
-
-  const [formData, setFormData] = useState({
-    serviceTypeId: '',
-    selectedPoliceIds: [] as string[],
-    date: format(new Date(), 'yyyy-MM-dd'),
-    observations: ''
-  });
-
-  const [showOnlyDrivers, setShowOnlyDrivers] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedServiceId, setSelectedServiceId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'ALL' | 'PJES' | 'OPS'>('ALL');
+  const [filterPlatoon, setFilterPlatoon] = useState('ALL');
+  const [filterOnlyAvailable, setFilterOnlyAvailable] = useState(false);
 
-  const toggleDay = (day: number) => {
-    if (selectedDays.includes(day)) {
-      setSelectedDays(selectedDays.filter(d => d !== day));
-    } else {
-      setSelectedDays([...selectedDays, day].sort((a, b) => a - b));
-    }
-  };
+  const calendarRef = useRef<FullCalendar>(null);
+  const draggablesDone = useRef(false);
 
   useEffect(() => {
-    const fetchBaseData = async () => {
-      setLoading(true);
-      try {
-        const sQ = activeTab === 'PJES' 
-          ? query(collection(db, 'serviceTypes'), where('tipo', '==', 'PJES'), orderBy('nome'))
-          : query(collection(db, 'serviceTypes'), where('tipo', '==', 'OPS'), orderBy('nome'));
-          
-        const sSnap = await getDocs(sQ);
-        const sData = sSnap.docs.map(d => ({ id: d.id, ...d.data() } as ServiceType));
-        setServices(sData);
-        
-        // Reset selection when tab changes
-        if (sData.length > 0 && !sData.find(s => s.id === formData.serviceTypeId)) {
-          setFormData(prev => ({ ...prev, serviceTypeId: sData[0].id }));
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBaseData();
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (!formData.serviceTypeId) {
-      setVolunteers([]);
-      return;
-    }
-
-    const fetchVolunteersAndScales = async () => {
-      const selectedService = services.find(s => s.id === formData.serviceTypeId);
-      if (!selectedService) return;
-
-      const dateObj = new Date(formData.date + 'T12:00:00');
-      const mKey = format(dateObj, 'yyyy-MM');
-
-      try {
-        const vQ = query(
-          collection(db, 'volunteers'), 
-          where('type', '==', selectedService.tipo),
-          where('month', '==', mKey)
-        );
-        const vSnap = await getDocs(vQ);
-        
-        // Fetch existing scales for this service
-        const eQ = query(collection(db, 'escalas'), where('serviceTypeId', '==', formData.serviceTypeId));
-        const eSnap = await getDocs(eQ);
-        setExistingScales(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as Escala)));
-
-        // Fetch ALL scales of the month
-        const monthStart = Timestamp.fromDate(startOfMonth(dateObj));
-        const monthEnd = Timestamp.fromDate(endOfMonth(dateObj));
-        const allMQS = await getDocs(query(
-          collection(db, 'escalas'), 
-          where('date', '>=', monthStart),
-          where('date', '<=', monthEnd)
-        ));
-        setAllEscalasOfMonth(allMQS.docs.map(d => ({ id: d.id, ...d.data() } as Escala)));
-
-        // Fetch Ordinary Schedules
-        const ordSnap = await getDocs(query(
-          collection(db, 'ordinarySchedules'),
-          where('month', '==', mKey)
-        ));
-        const oMap: Record<string, number[]> = {};
-        ordSnap.docs.forEach(d => {
-          const data = d.data();
-          oMap[data.policemanId] = data.days || [];
-        });
-        setOrdinarySchedules(oMap);
-
-        const polySnap = await getDocs(collection(db, 'policemen'));
-        const polyData = polySnap.docs.map(d => ({ id: d.id, ...d.data() } as Policeman));
-
-        const vData = vSnap.docs.map(vDoc => {
-          const v = { id: vDoc.id, ...vDoc.data() } as Volunteer;
-          const p = polyData.find(police => police.id === v.policemanId);
-          return { ...v, policeman: p };
-        });
-
-        const sortedVData = [...vData].sort((a, b) => {
-          if (!a.policeman || !b.policeman) return 0;
-          return sortPolicemen([a.policeman, b.policeman])[0] === a.policeman ? -1 : 1;
-        });
-
-        setVolunteers(sortedVData);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchVolunteersAndScales();
-  }, [formData.serviceTypeId, formData.date, services]);
-
-  const togglePolice = (id: string) => {
-    const conflicts = getDayConflicts(id, formData.date);
-    
-    if (conflicts.isOrdinary && !formData.selectedPoliceIds.includes(id)) {
-      return; // Strict impediment: cannot select if has ordinary service
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      selectedPoliceIds: prev.selectedPoliceIds.includes(id)
-        ? prev.selectedPoliceIds.filter(pId => pId !== id)
-        : [...prev.selectedPoliceIds, id]
-    }));
-  };
-
-  const getDayConflicts = (policemanId: string, dateStr: string) => {
-    const day = getDate(new Date(dateStr + 'T12:00:00'));
-    const isOrdinary = (ordinarySchedules[policemanId] || []).includes(day);
-    
-    const extraScalesOnDay = allEscalasOfMonth.filter(esc => {
-      const escDateStr = format(esc.date.toDate(), 'yyyy-MM-dd');
-      return escDateStr === dateStr && esc.policemenIds.includes(policemanId);
-    });
-
-    // Check monthly volunteer limits (cotas used)
-    const vol = volunteers.find(v => v.policemanId === policemanId);
-    const totalExtrasInMonth = allEscalasOfMonth.filter(esc => esc.policemenIds.includes(policemanId)).length;
-    const quotaReached = vol ? totalExtrasInMonth >= vol.cotas : false;
-
-    return {
-      isOrdinary,
-      hasExtra: extraScalesOnDay.length > 0,
-      totalExtrasInMonth,
-      quotaReached
-    };
-  };
-
-  const smartSuggest = () => {
-    if (!formData.serviceTypeId) return;
-    
-    const availableVolunteers = volunteers.filter(v => {
-      const conflicts = getDayConflicts(v.policemanId, formData.date);
-      return !conflicts.isOrdinary && !conflicts.hasExtra;
-    });
-
-    // Intelligent fair distribution
-    availableVolunteers.sort((a, b) => {
-      const conflictsA = getDayConflicts(a.policemanId, formData.date);
-      const conflictsB = getDayConflicts(b.policemanId, formData.date);
-      
-      // Prioritize who has fewer extras this month (fairness)
-      if (conflictsA.totalExtrasInMonth !== conflictsB.totalExtrasInMonth) {
-        return conflictsA.totalExtrasInMonth - conflictsB.totalExtrasInMonth;
-      }
-      
-      // Secondary: Seniority (antiguidade) - just an example of tie-breaker
-      return (a.policeman?.antiguidade || 0) - (b.policeman?.antiguidade || 0);
-    });
-
-    const suggestedIds = availableVolunteers.slice(0, 4).map(v => v.policemanId);
-    setFormData(prev => ({
-      ...prev,
-      selectedPoliceIds: [...new Set([...prev.selectedPoliceIds, ...suggestedIds])]
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formData.selectedPoliceIds.length === 0) {
-      alert('Selecione pelo menos um policial para a escala.');
-      return;
-    }
-
-    if (isMonthlyMode && selectedDays.length === 0) {
-      alert('Selecione pelo menos um dia do mês.');
-      return;
-    }
-
-    // Double check constraints for monthly mode
-    if (isMonthlyMode) {
-      for (const day of selectedDays) {
-        for (const pId of formData.selectedPoliceIds) {
-          const mKey = format(new Date(formData.date + 'T12:00:00'), 'yyyy-MM');
-          const isOrd = (ordinarySchedules[pId] || []).includes(day);
-          if (isOrd) {
-            const poly = volunteers.find(v => v.policemanId === pId)?.policeman?.nomeGuerra || pId;
-            alert(`O policial ${poly} possui serviço ordinário no dia ${day}. Remova-o ou desmarque este dia.`);
-            return;
+    // Enable external draggables
+    if (!draggablesDone.current && volunteers.length > 0) {
+      const containerEl = document.getElementById('external-volunteers');
+      if (containerEl) {
+        new Draggable(containerEl, {
+          itemSelector: '.fc-event',
+          eventData: (eventEl) => {
+            return {
+              title: eventEl.getAttribute('data-name'),
+              id: eventEl.getAttribute('data-id'),
+              extendedProps: {
+                policemanId: eventEl.getAttribute('data-id')
+              }
+            };
           }
-        }
+        });
+        draggablesDone.current = true;
       }
+    }
+  }, [volunteers]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const mKey = format(currentMonth, 'yyyy-MM');
+    const start = startOfMonth(currentMonth);
+    const end = endOfMonth(currentMonth);
+
+    try {
+      // 1. Fetch Service Types
+      const sSnap = await getDocs(collection(db, 'serviceTypes'));
+      const sData = sSnap.docs.map(d => ({ id: d.id, ...d.data() } as ServiceType));
+      setServices(sData);
+
+      // 2. Fetch Volunteers for the month
+      const vSnap = await getDocs(query(collection(db, 'volunteers'), where('month', '==', mKey)));
+      const polySnap = await getDocs(collection(db, 'policemen'));
+      const polyData = polySnap.docs.reduce((acc, d) => {
+        acc[d.id] = { id: d.id, ...d.data() } as Policeman;
+        return acc;
+      }, {} as Record<string, Policeman>);
+
+      const vData = vSnap.docs.map(vDoc => {
+        const v = { id: vDoc.id, ...vDoc.data() } as Volunteer;
+        return { ...v, policeman: polyData[v.policemanId] };
+      });
+      setVolunteers(vData);
+
+      // 3. Fetch All Scales of the month
+      const eSnap = await getDocs(query(
+        collection(db, 'escalas'), 
+        where('date', '>=', Timestamp.fromDate(start)),
+        where('date', '<=', Timestamp.fromDate(end))
+      ));
+      const eData = eSnap.docs.map(d => {
+        const data = d.data() as Escala;
+        return { 
+          id: d.id, 
+          ...data,
+          service: sData.find(s => s.id === data.serviceTypeId)
+        };
+      });
+      setAllEscalasOfMonth(eData);
+
+      // 4. Fetch Ordinary Schedules
+      const ordSnap = await getDocs(query(collection(db, 'ordinarySchedules'), where('month', '==', mKey)));
+      const oMap: Record<string, number[]> = {};
+      ordSnap.docs.forEach(d => {
+        const data = d.data();
+        oMap[data.policemanId] = data.days || [];
+      });
+      setOrdinarySchedules(oMap);
+
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [currentMonth]);
+
+  const handleDrop = async (info: any) => {
+    if (!isAdmin) return;
+    if (!selectedServiceId) {
+      alert('Selecione um Tipo de Serviço antes de arrastar policiais.');
+      return;
+    }
+
+    const policemanId = info.draggedEl.getAttribute('data-id');
+    const date = info.date;
+    const day = getDate(date);
+
+    // Checks
+    const isOrdinary = (ordinarySchedules[policemanId] || []).includes(day);
+    if (isOrdinary) {
+      alert('Impedido: O policial possui serviço ordinário nesta data.');
+      return;
+    }
+
+    const volunteer = volunteers.find(v => v.policemanId === policemanId);
+    const scaledCount = allEscalasOfMonth.filter(e => e.policemenIds.includes(policemanId)).length;
+    if (volunteer && scaledCount >= volunteer.cotas) {
+      alert('Limite atingido: O policial já atingiu sua cota de voluntariado.');
+      return;
+    }
+
+    const alreadyOnScale = allEscalasOfMonth.some(e => 
+      isSameDay(e.date.toDate(), date) && e.policemenIds.includes(policemanId)
+    );
+    if (alreadyOnScale) {
+       alert('Alerta: O policial já está escalado nesta data.');
+       return;
     }
 
     setSubmitting(true);
     try {
-      const batch = (await import('firebase/firestore')).writeBatch(db);
-      const baseDate = new Date(formData.date + 'T12:00:00');
-      const year = baseDate.getFullYear();
-      const month = baseDate.getMonth();
+      const existingEscala = allEscalasOfMonth.find(e => 
+        e.serviceTypeId === selectedServiceId && isSameDay(e.date.toDate(), date)
+      );
 
-      if (isMonthlyMode) {
-        for (const day of selectedDays) {
-          const dateToSave = new Date(year, month, day, 12, 0, 0);
-          const docRef = doc(collection(db, 'escalas'));
-          batch.set(docRef, {
-            serviceTypeId: formData.serviceTypeId,
-            policemenIds: formData.selectedPoliceIds,
-            date: Timestamp.fromDate(dateToSave),
-            observations: formData.observations,
-            createdAt: serverTimestamp()
-          });
-        }
+      if (existingEscala) {
+        await updateDoc(doc(db, 'escalas', existingEscala.id!), {
+          policemenIds: [...new Set([...existingEscala.policemenIds, policemanId])],
+          updatedAt: serverTimestamp()
+        });
       } else {
-        const docRef = doc(collection(db, 'escalas'));
-        batch.set(docRef, {
-          serviceTypeId: formData.serviceTypeId,
-          policemenIds: formData.selectedPoliceIds,
-          date: Timestamp.fromDate(new Date(formData.date + 'T12:00:00')),
-          observations: formData.observations,
+        await addDoc(collection(db, 'escalas'), {
+          serviceTypeId: selectedServiceId,
+          policemenIds: [policemanId],
+          date: Timestamp.fromDate(date),
+          observations: '',
           createdAt: serverTimestamp()
         });
       }
-      
-      await batch.commit();
       setSuccess(true);
-      setFormData(prev => ({ ...prev, selectedPoliceIds: [], observations: '' }));
-      setSelectedDays([]);
-      setTimeout(() => setSuccess(false), 5000);
+      setTimeout(() => setSuccess(false), 3000);
+      fetchData();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'escalas');
     } finally {
@@ -295,344 +226,356 @@ const CreateEscala = () => {
     }
   };
 
+  const handleSelect = async (info: any) => {
+    if (!isAdmin || !selectedServiceId) return;
+    
+    // Check if we want to add multiple volunteers to a range or something
+    // For now, let's keep it simple: drag and drop is primary.
+    // But we can implement a "Select Range" then clicking a button to add selected PMs.
+  };
+
+  const handleEventClick = async (info: any) => {
+    if (!isAdmin) return;
+    if (info.event.display === 'background') return;
+
+    if (confirm(`Deseja remover esta escala de ${info.event.title}?`)) {
+       const escalaId = info.event.extendedProps.escalaId;
+       const pId = info.event.extendedProps.policemanId;
+       
+       const escala = allEscalasOfMonth.find(e => e.id === escalaId);
+       if (!escala) return;
+
+       try {
+         if (escala.policemenIds.length <= 1) {
+           await deleteDoc(doc(db, 'escalas', escalaId));
+         } else {
+           await updateDoc(doc(db, 'escalas', escalaId), {
+             policemenIds: escala.policemenIds.filter(id => id !== pId)
+           });
+         }
+         fetchData();
+       } catch (err) {
+         console.error(err);
+       }
+    }
+  };
+
+  const events = allEscalasOfMonth.flatMap(e => {
+    const s = services.find(srv => srv.id === e.serviceTypeId);
+    return e.policemenIds.map(pId => {
+      const p = volunteers.find(v => v.policemanId === pId)?.policeman;
+      return {
+        id: `${e.id}-${pId}`,
+        title: p?.nomeGuerra || 'PM',
+        start: format(e.date.toDate(), 'yyyy-MM-dd'),
+        backgroundColor: s?.tipo === 'PJES' ? '#1e293b' : '#c2410c',
+        borderColor: s?.tipo === 'PJES' ? '#1e293b' : '#c2410c',
+        extendedProps: {
+          escalaId: e.id,
+          policemanId: pId,
+          tipo: s?.tipo
+        }
+      };
+    });
+  });
+
+  // Ordinary service markers
+  Object.entries(ordinarySchedules).forEach(([pId, days]) => {
+     days.forEach(day => {
+        const p = volunteers.find(v => v.policemanId === pId)?.policeman;
+        if (p) {
+           events.push({
+             id: `ord-${pId}-${day}`,
+             title: `X ${p.nomeGuerra}`,
+             start: format(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day), 'yyyy-MM-dd'),
+             backgroundColor: '#fee2e2',
+             borderColor: '#fecaca',
+             display: 'background',
+             extendedProps: { isOrdinary: true }
+           } as any);
+        }
+     });
+  });
+
+  const filteredVolunteers = volunteers.filter(v => {
+    const scaledCount = allEscalasOfMonth.filter(e => e.policemenIds.includes(v.policemanId)).length;
+    const available = (v.cotas || 0) - scaledCount;
+
+    const matchesSearch = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.policeman?.matricula.includes(searchTerm);
+    const matchesType = filterType === 'ALL' || v.type === filterType;
+    const matchesPlatoon = filterPlatoon === 'ALL' || v.policeman?.pelotao === filterPlatoon;
+    const matchesAvailable = !filterOnlyAvailable || available > 0;
+
+    return matchesSearch && matchesType && matchesPlatoon && matchesAvailable;
+  });
+
   if (!isAdmin) return <div className="text-center py-20 text-xs font-black uppercase text-slate-400 italic font-sans">Acesso restrito ao P/1.</div>;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2">
-            <Calendar className="w-7 h-7 text-pmpe-gold" />
-            Gestor de Escalas {activeTab}
-          </h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronização mensal de voluntários e serviços</p>
-        </div>
-
-        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-sm">
-          <button
-            onClick={() => setActiveTab('PJES')}
-            className={cn(
-              "px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-              activeTab === 'PJES' ? "bg-pmpe-navy text-white shadow-xl" : "text-slate-400 hover:text-slate-600"
-            )}
-          >
-            PJES
-          </button>
-          <button
-            onClick={() => setActiveTab('OPS')}
-            className={cn(
-              "px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-              activeTab === 'OPS' ? "bg-pmpe-navy text-white shadow-xl" : "text-slate-400 hover:text-slate-600"
-            )}
-          >
-            OPS
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Service & Controls */}
-        <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-             <div className="absolute top-0 left-0 w-1 h-full bg-pmpe-gold" />
-             <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-widest flex items-center gap-2">
-                  <Briefcase className="w-4 h-4 text-pmpe-gold" /> Serviços {activeTab}
+    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-120px)]">
+      {/* Sidebar: Volunteers */}
+      <motion.div 
+        initial={{ x: -20, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        className="w-full lg:w-96 flex flex-col bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden shrink-0"
+      >
+        <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center justify-between mb-5">
+             <div>
+                <h3 className="text-xs font-black text-pmpe-navy uppercase tracking-widest flex items-center gap-2">
+                   <Users className="w-4 h-4 text-pmpe-gold" /> Painel de Voluntários
                 </h3>
-                <span className="bg-slate-100 px-2 py-0.5 rounded text-[8px] font-black">{services.length}</span>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mt-1">Arraste para o calendário</p>
+             </div>
+             <div className="bg-pmpe-navy text-white text-[9px] font-black px-2.5 py-1 rounded-lg">
+                {filteredVolunteers.length}
+             </div>
+          </div>
+
+          <div className="space-y-3">
+             <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input 
+                  type="text"
+                  placeholder="Nome ou Matrícula..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-[11px] font-bold outline-none font-sans focus:ring-2 focus:ring-pmpe-navy/5 shadow-sm"
+                />
              </div>
              
-             <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 scrollbar-thin">
-                {loading ? (
-                  <div className="py-10 flex flex-col items-center gap-2">
-                    <div className="w-5 h-5 border-2 border-pmpe-navy border-t-transparent rounded-full animate-spin" />
-                    <span className="text-[8px] font-bold text-slate-400 uppercase">Sincronizando...</span>
-                  </div>
-                ) : services.length === 0 ? (
-                  <div className="py-10 text-center text-[10px] font-bold text-slate-300 uppercase italic">Nenhum serviço disponível</div>
-                ) : (
-                  services.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => setFormData({...formData, serviceTypeId: s.id, selectedPoliceIds: []})}
-                      className={cn(
-                        "w-full p-4 rounded-xl border text-left transition-all relative group",
-                        formData.serviceTypeId === s.id 
-                          ? "border-pmpe-navy bg-pmpe-navy shadow-lg ring-4 ring-pmpe-navy/5" 
-                          : "border-slate-100 bg-slate-50/50 hover:border-slate-300 hover:bg-white"
-                      )}
-                    >
-                       <div className="relative z-10">
-                          <p className={cn(
-                            "text-[8px] font-black uppercase tracking-widest",
-                            formData.serviceTypeId === s.id ? "text-pmpe-gold" : "text-pmpe-navy"
-                          )}>{s.tipo} • {s.cidade}</p>
-                          <p className={cn(
-                            "text-[11px] font-black uppercase mt-1 leading-tight",
-                            formData.serviceTypeId === s.id ? "text-white" : "text-slate-800"
-                          )}>{s.nome}</p>
-                       </div>
-                       {formData.serviceTypeId === s.id && (
-                         <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                           <CheckCircle2 className="w-5 h-5 text-pmpe-gold" />
-                         </div>
-                       )}
-                    </button>
-                  ))
-                )}
-             </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-             <div className="flex items-center gap-2 mb-4">
-                <Clock className="w-4 h-4 text-pmpe-gold" />
-                <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-widest">Parâmetros de Escala</h3>
-             </div>
-             
-             <div className="space-y-4">
-                <div>
-                   <label className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Data ou Mês Base</label>
-                   <input 
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({...formData, date: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-pmpe-navy/5 outline-none font-sans"
-                   />
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                   <div className="flex items-center justify-between mb-3">
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Publicação em Massa</span>
-                      <button 
-                        onClick={() => setIsMonthlyMode(!isMonthlyMode)}
-                        className={cn(
-                          "px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all",
-                          isMonthlyMode ? "bg-pmpe-navy text-white shadow-md" : "bg-white text-slate-400 border border-slate-200"
-                        )}
-                      >
-                         {isMonthlyMode ? 'ATIVO' : 'DESATIVADO'}
-                      </button>
-                   </div>
-                   <p className="text-[8px] font-bold text-slate-400 uppercase leading-relaxed tracking-tight">
-                     {isMonthlyMode 
-                      ? 'No modo mensal, você pode selecionar múltiplos dias e aplicar a mesma escala simultaneamente.' 
-                      : 'No modo avulso, as alterações são aplicadas apenas para a data selecionada acima.'}
-                   </p>
-                </div>
-             </div>
-          </div>
-        </div>
-
-        {/* Right Column: Calendar and Allocation */}
-        <div className="lg:col-span-8 space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative">
-             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-widest flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-pmpe-gold" /> Mapa de Alocação
-                  </h3>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">Selecione os dias no calendário para associar o efetivo</p>
-                </div>
-
-                {isMonthlyMode && (
-                  <button 
-                    onClick={() => {
-                      const days = eachDayOfInterval({
-                        start: startOfMonth(new Date(formData.date + 'T12:00:00')),
-                        end: endOfMonth(new Date(formData.date + 'T12:00:00'))
-                      }).map(d => getDate(d));
-                      setSelectedDays(selectedDays.length === days.length ? [] : days);
-                    }}
-                    className="text-[9px] font-black text-white bg-pmpe-navy px-4 py-2 rounded-xl shadow-lg hover:shadow-pmpe-navy/20 transition-all uppercase tracking-widest"
-                  >
-                    Marcar Todo o Mês
-                  </button>
-                )}
-             </div>
-
-             <div className="grid grid-cols-7 gap-3">
-                {['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => (
-                  <div key={d} className="text-center text-[9px] font-black text-slate-300 py-2 border-b border-slate-50">{d}</div>
-                ))}
-                {Array.from({ length: getDay(startOfMonth(new Date(formData.date + 'T12:00:00'))) }).map((_, i) => (
-                  <div key={`pad-${i}`} className="h-16" />
-                ))}
-                {eachDayOfInterval({
-                  start: startOfMonth(new Date(formData.date + 'T12:00:00')),
-                  end: endOfMonth(new Date(formData.date + 'T12:00:00'))
-                }).map(dayDate => {
-                  const day = getDate(dayDate);
-                  const isDaySelected = isMonthlyMode 
-                    ? selectedDays.includes(day) 
-                    : isSameDay(new Date(formData.date + 'T12:00:00'), dayDate);
-                  
-                  const hasScale = existingScales.some(esc => isSameDay(esc.date.toDate(), dayDate));
-
-                  return (
-                    <button
-                      key={day}
-                      onClick={() => {
-                        if (isMonthlyMode) toggleDay(day);
-                        else setFormData({...formData, date: format(dayDate, 'yyyy-MM-dd')});
-                      }}
-                      className={cn(
-                        "h-16 rounded-xl border flex flex-col items-center justify-center transition-all relative group",
-                        isDaySelected 
-                          ? "bg-pmpe-navy border-pmpe-navy mb-1 shadow-lg z-10 scale-[1.05]" 
-                          : "bg-white border-slate-100 hover:border-slate-300 shadow-sm"
-                      )}
-                    >
-                      <span className={cn("text-xs font-black", isDaySelected ? "text-white" : "text-slate-800")}>{day}</span>
-                      {hasScale && (
-                        <div className="flex gap-0.5 mt-1">
-                          <div className={cn("w-1 h-1 rounded-full", isDaySelected ? "bg-pmpe-gold" : "bg-red-400")} />
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-             </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-                <div>
-                   <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-widest flex items-center gap-2">
-                     <Users className="w-4 h-4 text-pmpe-gold" /> Voluntários Candidatos
-                   </h3>
-                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">Selecione quem será associado à(s) data(s) acima</p>
-                </div>
-                
-                <div className="flex gap-2 w-full sm:w-auto">
-                   <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input 
-                        type="text"
-                        placeholder="Nome ou Matrícula..."
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none font-sans"
-                      />
-                   </div>
+             <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {['ALL', 'PJES', 'OPS'].map((type) => (
                    <button 
-                    onClick={smartSuggest}
-                    className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all font-sans"
-                   >
-                     Sugestão
-                   </button>
-                </div>
-             </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {volunteers
-                  .filter(v => !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.policeman?.matricula.includes(searchTerm))
-                  .map(v => {
-                    const conflicts = getDayConflicts(v.policemanId, formData.date);
-                    const isSelected = formData.selectedPoliceIds.includes(v.policemanId);
-                    const isBlocked = conflicts.isOrdinary || conflicts.quotaReached;
-
-                    return (
-                      <button
-                        key={v.id}
-                        disabled={isBlocked && !isSelected}
-                        onClick={() => togglePolice(v.policemanId)}
-                        className={cn(
-                          "p-3 rounded-xl border text-left flex flex-col justify-between h-32 transition-all relative overflow-hidden group",
-                          isSelected 
-                            ? "bg-pmpe-navy border-pmpe-navy shadow-inner" 
-                            : isBlocked 
-                              ? "bg-red-50 border-red-100 opacity-60 cursor-not-allowed" 
-                              : "bg-white border-slate-50 hover:border-slate-200"
-                        )}
-                      >
-                         <div className="flex justify-between items-start">
-                            <div className={cn(
-                              "w-4 h-4 rounded-full border flex items-center justify-center shrink-0",
-                              isSelected ? "bg-white border-white" : "border-slate-200 bg-white"
-                            )}>
-                              {isSelected && <CheckCircle2 className="w-3 h-3 text-pmpe-navy" />}
-                              {isBlocked && !isSelected && <AlertCircle className="w-3 h-3 text-red-500" />}
-                            </div>
-                            <div className="flex flex-col items-end">
-                               <div className={cn(
-                                 "text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter",
-                                 isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
-                               )}>
-                                 Cotas: {conflicts.totalExtrasInMonth}/{v.cotas}
-                               </div>
-                               {v.policeman?.isMotorista && <Car className={cn("w-3.5 h-3.5 mt-1", isSelected ? "text-pmpe-gold" : "text-purple-400")} />}
-                            </div>
-                         </div>
-
-                         <div>
-                            <p className={cn("text-[9px] font-black uppercase tracking-tight truncate", isSelected ? "text-white/70" : "text-slate-400")}>
-                               {v.policeman?.graduacaoPosto}
-                            </p>
-                            <p className={cn("text-[11px] font-black uppercase truncate", isSelected ? "text-white" : "text-slate-800")}>
-                               {v.policeman?.nomeGuerra}
-                            </p>
-                         </div>
-
-                         {isBlocked && !isSelected && (
-                           <div className="absolute inset-0 bg-red-100/10 flex items-center justify-center p-2">
-                             <div className="bg-red-600 text-white text-[7px] font-black uppercase tracking-widest px-2 py-0.5 rounded shadow-lg transform -rotate-12">
-                               {conflicts.isOrdinary ? 'IMPEDIDO: ORDINÁRIA' : 'LIMITE DE COTAS'}
-                             </div>
-                           </div>
-                         )}
-
-                         {isSelected && (
-                           <div className="absolute -top-1 -right-1 p-2 bg-pmpe-gold/20 rounded-bl-lg">
-                              <Crown className="w-3.5 h-3.5 text-pmpe-gold" />
-                           </div>
-                         )}
-                      </button>
-                    );
-                  })}
-             </div>
-
-             <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex-1 w-full">
-                   <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
-                     <span className="w-1.5 h-1.5 bg-pmpe-gold rounded-full" /> Observações da Escala
-                   </label>
-                   <input
-                      type="text"
-                      placeholder="Ex: Ponto de encontro, fardamento, etc..."
-                      value={formData.observations}
-                      onChange={(e) => setFormData({...formData, observations: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-pmpe-navy/5 font-sans"
-                   />
-                </div>
-
-                <div className="flex items-center gap-4 shrink-0">
-                   <div className="text-right">
-                      <p className="text-[10px] font-black text-pmpe-navy uppercase tracking-tighter leading-none mb-1">Total de Escalados</p>
-                      <p className="text-xl font-black text-slate-800 uppercase tracking-tighter leading-none">
-                        {formData.selectedPoliceIds.length} <span className="text-[10px] text-slate-400">Pms</span>
-                      </p>
-                   </div>
-                   <button 
-                      onClick={handleSubmit}
-                      disabled={submitting || !formData.serviceTypeId || formData.selectedPoliceIds.length === 0 || (isMonthlyMode && selectedDays.length === 0)}
-                      className={cn(
-                        "px-10 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all transform hover:scale-[1.02] shadow-2xl flex items-center gap-3 font-sans",
-                        submitting || !formData.serviceTypeId || formData.selectedPoliceIds.length === 0 
-                          ? "bg-slate-300 shadow-none cursor-not-allowed" 
-                          : "bg-pmpe-navy hover:shadow-pmpe-navy/20"
-                      )}
-                   >
-                     {submitting ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                     ) : (
-                        <Save className="w-4 h-4 text-pmpe-gold" />
+                     key={type}
+                     onClick={() => setFilterType(type as any)}
+                     className={cn(
+                       "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all border",
+                       filterType === type 
+                        ? "bg-pmpe-navy text-white border-pmpe-navy shadow-md" 
+                        : "bg-white text-slate-400 border-slate-200 hover:border-slate-300"
                      )}
-                     <span>{isMonthlyMode ? `Publicar Ciclo (${selectedDays.length} Dias)` : 'Publicar Escala'}</span>
-                   </button>
-                </div>
+                   >{type === 'ALL' ? 'Todos' : type}</button>
+                ))}
+                <button 
+                   onClick={() => setFilterOnlyAvailable(!filterOnlyAvailable)}
+                   className={cn(
+                     "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase whitespace-nowrap transition-all border flex items-center gap-1",
+                     filterOnlyAvailable ? "bg-emerald-600 text-white border-emerald-600 shadow-md" : "bg-white text-slate-400 border-slate-200"
+                   )}
+                >
+                   <CheckCircle2 className="w-3 h-3" /> Disp.
+                </button>
+             </div>
+
+             <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {['ALL', '1º PEL', '2º PEL', '3º PEL', 'GATI'].map((plt) => (
+                   <button 
+                     key={plt}
+                     onClick={() => setFilterPlatoon(plt)}
+                     className={cn(
+                       "px-2.5 py-1.5 rounded-xl text-[8px] font-black uppercase whitespace-nowrap transition-all border",
+                       filterPlatoon === plt 
+                        ? "bg-slate-200 text-slate-800 border-slate-300 shadow-inner" 
+                        : "bg-white text-slate-400 border-slate-100 font-bold"
+                     )}
+                   >{plt}</button>
+                ))}
              </div>
           </div>
         </div>
-      </div>
+
+        <div id="external-volunteers" className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+           {loading ? (
+             <div className="flex flex-col items-center justify-center h-40 opacity-30">
+               <div className="w-10 h-10 border-4 border-pmpe-navy border-t-transparent rounded-full animate-spin mb-3" />
+               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sincronizando...</p>
+             </div>
+           ) : filteredVolunteers.length === 0 ? (
+             <div className="flex flex-col items-center justify-center py-20 opacity-30">
+               <Users className="w-12 h-12 mb-2 text-slate-300" />
+               <p className="text-[11px] font-black text-slate-400 uppercase italic">Nenhum voluntário</p>
+             </div>
+           ) : (
+             filteredVolunteers.map(v => {
+                const scaledCount = allEscalasOfMonth.filter(e => e.policemenIds.includes(v.policemanId)).length;
+                const available = (v.cotas || 0) - scaledCount;
+                const isLimit = available <= 0;
+                const isNear = available > 0 && available <= 2;
+
+                return (
+                  <div 
+                    key={v.id}
+                    data-id={v.policemanId}
+                    data-name={v.policeman?.nomeGuerra || 'PM'}
+                    className={cn(
+                      "fc-event p-3.5 rounded-2xl border transition-all relative group overflow-hidden bg-white",
+                      isLimit 
+                        ? "opacity-40 grayscale pointer-events-none bg-slate-50 border-slate-100" 
+                        : "cursor-grab active:cursor-grabbing border-slate-100 hover:border-pmpe-navy/30 hover:shadow-xl hover:-translate-y-0.5"
+                    )}
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                       <div className="flex gap-3">
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center text-[10px] font-black shrink-0 shadow-sm transition-colors",
+                            v.type === 'PJES' ? "bg-slate-100 text-slate-800" : "bg-orange-50 text-orange-700"
+                          )}>
+                             {v.policeman?.graduacaoPosto.substring(0, 2)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                             <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight truncate leading-tight">{v.policeman?.nomeGuerra}</p>
+                             <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-[9px] font-bold text-slate-400">Mat: {v.policeman?.matricula}</p>
+                                <span className={cn(
+                                   "px-1 rounded text-[7px] font-black uppercase tracking-tighter",
+                                   v.policeman?.situacao === 'ATIVO' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                                )}>{v.policeman?.situacao}</span>
+                             </div>
+                          </div>
+                       </div>
+                       <div className={cn(
+                          "w-2.5 h-2.5 rounded-full",
+                          isLimit ? "bg-red-500" : isNear ? "bg-amber-500" : "bg-emerald-500 outline outline-4 outline-emerald-500/10"
+                       )} />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-50 bg-slate-50/50 -mx-3.5 px-3.5 mb-2">
+                       <div className="text-center">
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Solicit.</p>
+                          <p className="text-[12px] font-black text-slate-800">{v.cotas}</p>
+                       </div>
+                       <div className="text-center">
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Escal.</p>
+                          <p className="text-[12px] font-black text-pmpe-navy">{scaledCount}</p>
+                       </div>
+                       <div className="text-center">
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Dispon.</p>
+                          <p className={cn("text-[12px] font-black", available > 0 ? "text-emerald-600" : "text-red-500")}>{available}</p>
+                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                       <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{v.policeman?.pelotao}</span>
+                       {v.policeman?.isMotorista && <Car className="w-3.5 h-3.5 text-purple-400" />}
+                    </div>
+                  </div>
+                );
+             })
+           )}
+        </div>
+      </motion.div>
+
+      {/* Main Area: Calendar */}
+      <motion.div 
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="flex-1 flex flex-col bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden"
+      >
+        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-6 bg-slate-50/40">
+          <div className="flex items-center gap-6">
+             <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm ring-4 ring-slate-100">
+                <button 
+                  onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                  className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 transition-colors"
+                ><ChevronLeft className="w-5 h-5" /></button>
+                <div className="px-6 flex items-center justify-center min-w-[160px]">
+                   <span className="text-sm font-black text-pmpe-navy uppercase tracking-[0.1em]">{format(currentMonth, 'MMMM / yyyy', { locale: ptBR })}</span>
+                </div>
+                <button 
+                  onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                  className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 transition-colors"
+                ><ChevronRight className="w-5 h-5" /></button>
+             </div>
+
+             <div className="hidden xl:flex items-center gap-4 bg-white/50 px-4 py-2 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-2">
+                   <div className="w-2.5 h-2.5 rounded bg-slate-800" />
+                   <span className="text-[9px] font-black text-slate-500 uppercase">PJES</span>
+                </div>
+                <div className="flex items-center gap-2">
+                   <div className="w-2.5 h-2.5 rounded bg-orange-700" />
+                   <span className="text-[9px] font-black text-slate-500 uppercase">OPS</span>
+                </div>
+                <div className="flex items-center gap-2">
+                   <div className="w-2.5 h-2.5 rounded bg-red-400" />
+                   <span className="text-[9px] font-black text-slate-500 uppercase font-sans">Ordinária</span>
+                </div>
+             </div>
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+             <div className="relative flex-1 sm:w-80">
+                <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-pmpe-gold" />
+                <select 
+                  value={selectedServiceId}
+                  onChange={(e) => setSelectedServiceId(e.target.value)}
+                  className={cn(
+                    "w-full pl-12 pr-4 py-3 border rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none transition-all appearance-none cursor-pointer shadow-sm",
+                    !selectedServiceId ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-white border-slate-200 text-pmpe-navy focus:ring-4 focus:ring-pmpe-navy/5"
+                  )}
+                >
+                   <option value="">-- SELECIONE O SERVIÇO ATIVO --</option>
+                   {services.map(s => (
+                     <option key={s.id} value={s.id}>{s.tipo} • {s.nome} ({s.cidade})</option>
+                   ))}
+                </select>
+             </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-hidden p-6 custom-calendar-container bg-white">
+           <FullCalendar
+             ref={calendarRef}
+             plugins={[dayGridPlugin, interactionPlugin, listPlugin]}
+             initialView="dayGridMonth"
+             headerToolbar={false}
+             locale={ptBR}
+             events={events}
+             editable={isAdmin}
+             droppable={isAdmin}
+             selectable={isAdmin}
+             select={handleSelect}
+             drop={handleDrop}
+             eventClick={handleEventClick}
+             height="100%"
+             dayMaxEvents={3}
+             fixedWeekCount={false}
+             validRange={{
+                start: format(startOfMonth(currentMonth), 'yyyy-MM-dd'),
+                end: format(addMonths(endOfMonth(currentMonth), 1), 'yyyy-MM-dd')
+             }}
+             eventContent={(arg) => {
+                if (arg.event.extendedProps.isOrdinary) {
+                   return { html: `<div class="bg-red-500/10 text-red-600 text-[10px] font-black uppercase text-center py-1.5 rounded-lg border border-red-200 shadow-sm">X</div>` };
+                }
+                const isPJES = arg.event.extendedProps.tipo === 'PJES';
+                return (
+                   <div className={cn(
+                     "px-2 py-1 rounded-lg border border-white/10 text-[10px] font-black uppercase text-white shadow-md truncate flex items-center gap-1.5",
+                     isPJES ? "bg-slate-800" : "bg-orange-700"
+                   )}>
+                      {isPJES ? <Shield className="w-3 h-3 text-pmpe-gold" /> : <Briefcase className="w-3 h-3 text-white/50" />}
+                      <span className="truncate">{arg.event.title}</span>
+                   </div>
+                );
+             }}
+             dayCellContent={(arg) => {
+               const day = parseInt(arg.dayNumberText);
+               const ordinaryExists = Object.values(ordinarySchedules).some(days => days.includes(day));
+               
+               return (
+                  <div className="flex flex-col items-center justify-center">
+                     <span className={cn(
+                       "text-[12px] font-black",
+                       arg.isToday ? "text-pmpe-navy" : "text-slate-400"
+                     )}>{arg.dayNumberText}</span>
+                  </div>
+               );
+             }}
+           />
+        </div>
+      </motion.div>
 
       <AnimatePresence>
         {success && (
@@ -640,21 +583,89 @@ const CreateEscala = () => {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-8 py-4 rounded-2xl shadow-2xl z-50 flex items-center gap-4 border border-emerald-500/20"
+            className="fixed bottom-10 right-10 bg-pmpe-navy text-white px-8 py-4 rounded-3xl shadow-2xl z-50 flex items-center gap-4 border border-white/10"
           >
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <CheckCircle2 className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm font-black uppercase tracking-tighter">Escalas Criadas!</p>
-              <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest leading-none">O boletim diário foi atualizado com as novas escalas.</p>
+              <p className="text-sm font-black uppercase tracking-tighter">Base Atualizada</p>
+              <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-0.5">As cotas foram recalculadas com sucesso.</p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <style>{`
+        .custom-calendar-container .fc {
+          --fc-border-color: #f1f5f9;
+          --fc-daygrid-event-dot-width: 8px;
+          --fc-page-bg-color: transparent;
+          font-family: inherit;
+        }
+        .custom-calendar-container .fc-daygrid-day:hover {
+          background-color: #f8fafc;
+        }
+        .custom-calendar-container .fc-col-header-cell {
+          padding: 16px 0;
+          background: #f8fafc;
+          border-bottom: 2px solid #e2e8f0;
+        }
+        .custom-calendar-container .fc-col-header-cell-cushion {
+          font-size: 11px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.15em;
+          color: #64748b;
+          text-decoration: none !important;
+        }
+        .custom-calendar-container .fc-daygrid-day-number {
+          padding: 8px 12px;
+          font-weight: 900;
+          font-size: 13px;
+          color: #94a3b8;
+          text-decoration: none !important;
+          transition: color 0.3s;
+        }
+        .custom-calendar-container .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+          color: #1e293b;
+          background: #f1f5f9;
+          border-radius: 0 0 12px 12px;
+        }
+        .custom-calendar-container .fc-day-today {
+          background: #f8fafc !important;
+        }
+        .custom-calendar-container .fc-event {
+          border-radius: 10px;
+          margin: 2px 4px;
+          cursor: pointer;
+          border: none !important;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .custom-calendar-container .fc-event:hover {
+          transform: scale(1.02);
+          box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+          z-index: 50;
+        }
+        .custom-calendar-container .fc-daygrid-day-frame {
+          min-height: 120px;
+        }
+        .custom-calendar-container .fc-bg-event {
+          opacity: 1 !important;
+        }
+        .custom-calendar-container .fc-day-other {
+          background: #fbfbfc !important;
+          opacity: 0.4;
+        }
+        .custom-calendar-container .fc-daygrid-day-top {
+          flex-direction: row;
+        }
+        .fc-daygrid-event-harness {
+           margin-bottom: 2px;
+        }
+      `}</style>
     </div>
   );
 };
-
 
 export default CreateEscala;
