@@ -1,8 +1,8 @@
 {
   "entities": {
     "Policeman": {
-      "title": "Policeman",
-      "description": "Dados do policial militar (Pecúlio)",
+      "title": "Policial",
+      "description": "Dados do policial militar",
       "type": "object",
       "properties": {
         "nomeCompleto": { "type": "string" },
@@ -11,136 +11,72 @@
         "matricula": { "type": "string" },
         "telefone": { "type": "string" },
         "situacao": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "pjesCotasMax": { "type": "number" },
+        "opsCotasMax": { "type": "number" }
       },
       "required": ["nomeCompleto", "nomeGuerra", "graduacaoPosto", "matricula"]
     },
     "ServiceType": {
-      "title": "Service Type",
-      "description": "Definição de tipos de serviço (PJES/OPS)",
+      "title": "Tipo de Serviço",
+      "description": "Configuração de modalidade de serviço (PJES/OPS)",
       "type": "object",
       "properties": {
         "nome": { "type": "string" },
-        "tipo": { "type": "string", "enum": ["PJES", "OPS"] },
+        "tipo": { "type": "string", "enum": ["PJES", "OPS", "ORDINARIO", "EXTRA"] },
+        "sigla": { "type": "string" },
         "cidade": { "type": "string" },
         "horarioInicio": { "type": "string" },
         "horarioTermino": { "type": "string" },
-        "observacoes": { "type": "string" },
-        "cotasPorEscala": { "type": "number" },
+        "cotasPorServico": { "type": "number" },
         "isActive": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "month": { "type": "string" },
+        "vagasNecessarias": { "type": "number" }
       },
-      "required": ["nome", "tipo", "cidade", "horarioInicio", "horarioTermino", "cotasPorEscala", "isActive"]
-    },
-    "Volunteer": {
-      "title": "Volunteer",
-      "description": "Policiais voluntários para serviços específicos",
-      "type": "object",
-      "properties": {
-        "policemanId": { "type": "string" },
-        "type": { "type": "string", "enum": ["PJES", "OPS"] },
-        "cotas": { "type": "number" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["policemanId", "type", "cotas"]
+      "required": ["nome", "tipo", "sigla", "cotasPorServico", "isActive"]
     },
     "Escala": {
       "title": "Escala",
-      "description": "Escala extra criada",
+      "description": "Vinculação de policiais a um serviço numa data",
       "type": "object",
       "properties": {
         "serviceTypeId": { "type": "string" },
-        "policemenIds": { "type": "array", "items": { "type": "string" } },
+        "policemenIds": { "type": "array" },
         "date": { "type": "string", "format": "date-time" },
-        "observations": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "observations": { "type": "string" }
       },
       "required": ["serviceTypeId", "policemenIds", "date"]
     },
-    "User": {
-      "title": "User",
-      "description": "Dados do usuário do sistema para controle de acesso",
-      "type": "object",
-      "properties": {
-        "email": { "type": "string" },
-        "isAdmin": { "type": "boolean" }
-      },
-      "required": ["email"]
-    },
-    "OrdinarySchedule": {
-      "title": "Ordinary Schedule",
-      "description": "Dias de serviço ordinário de um policial em um mês específico",
-      "type": "object",
-      "properties": {
-        "policemanId": { "type": "string" },
-        "month": { "type": "string", "description": "Formato YYYY-MM" },
-        "days": { "type": "array", "items": { "type": "number" } },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["policemanId", "month", "days"]
-    },
-    "QuotaSettings": {
-      "title": "Quota Settings",
-      "description": "Limites mensais de cotas para a unidade",
-      "type": "object",
-      "properties": {
-        "month": { "type": "string" },
-        "pjesTotal": { "type": "number" },
-        "opsTotal": { "type": "number" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["month", "pjesTotal", "opsTotal"]
-    },
     "QuotaLog": {
-      "title": "Quota Log",
-      "description": "Logs de consumo de cotas",
+      "title": "Log de Cota",
+      "description": "Registro de consumo de cota por policial/serviço",
       "type": "object",
       "properties": {
         "serviceTypeId": { "type": "string" },
-        "serviceName": { "type": "string" },
+        "policemanId": { "type": "string" },
         "escalaId": { "type": "string" },
-        "tipo": { "type": "string", "enum": ["PJES", "OPS"] },
+        "tipo": { "type": "string" },
         "quantidade": { "type": "number" },
-        "usuarioUid": { "type": "string" },
-        "usuarioEmail": { "type": "string" },
-        "data": { "type": "string", "format": "date-time" },
-        "month": { "type": "string" }
-      },
-      "required": ["serviceTypeId", "tipo", "quantidade", "usuarioUid", "month"]
+        "month": { "type": "string" },
+        "usuarioUid": { "type": "string" }
+      }
     }
   },
   "firestore": {
-    "policemen": {
+    "/policemen/{policemanId}": {
       "schema": "Policeman",
-      "description": "Coleção de policiais militares"
+      "description": "Lista de efetivo"
     },
-    "serviceTypes": {
+    "/serviceTypes/{serviceTypeId}": {
       "schema": "ServiceType",
-      "description": "Tipos de serviço (PJES/OPS)"
+      "description": "Modalidades de serviço configuradas"
     },
-    "volunteers": {
-      "schema": "Volunteer",
-      "description": "Pool de voluntários"
-    },
-    "escalas": {
+    "/escalas/{escalaId}": {
       "schema": "Escala",
-      "description": "Escalas geradas"
+      "description": "Lançamentos de escala"
     },
-    "users": {
-      "schema": "User",
-      "description": "Usuários do sistema"
-    },
-    "ordinarySchedules": {
-      "schema": "OrdinarySchedule",
-      "description": "Escala ordinária dos policiais (dias fixos de serviço no mês)"
-    },
-    "quotaSettings": {
-      "schema": "QuotaSettings",
-      "description": "Configurações de cotas mensais da unidade"
-    },
-    "quotaLogs": {
+    "/quotaLogs/{logId}": {
       "schema": "QuotaLog",
-      "description": "Históricos de consumo de cotas"
+      "description": "Logs de consumo de cota"
     }
   }
 }
