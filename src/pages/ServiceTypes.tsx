@@ -70,7 +70,7 @@ const ServiceTypes = () => {
         return { 
           id: doc.id, 
           ...d,
-          activationType: d.activationType || 'SPECIFIC',
+          activationType: d.activationType || 'ALL',
           activeDates: d.activeDates || [],
           month: d.month || format(new Date(), 'yyyy-MM'),
           cotasPorServico: d.cotasPorServico ?? d.cotasPorEscala ?? 1,

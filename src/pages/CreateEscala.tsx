@@ -83,6 +83,7 @@ const CreateEscala = () => {
   const mKey = format(currentMonth, 'yyyy-MM');
 
   const [serviceSearchTerm, setServiceSearchTerm] = useState('');
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -175,9 +176,11 @@ const CreateEscala = () => {
     fetchData();
   }, [currentMonth]);
 
-  const handleAssignService = async (serviceId: string) => {
-    if (!assignmentModal || !isAdmin) return;
-    const { policemanId, date } = assignmentModal;
+  const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }) => {
+    const assignInfo = customAssignInfo || assignmentModal;
+    if (!assignInfo || !isAdmin) return;
+    
+    const { policemanId, date } = assignInfo;
     const service = services.find(s => s.id === serviceId);
     if (!service) return;
 
@@ -185,6 +188,14 @@ const CreateEscala = () => {
     const existingEscala = allEscalasOfMonth.find(e => 
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
+    
+    // Check if PM is already in THIS service on this day
+    if (existingEscala?.policemenIds.includes(policemanId)) {
+       if (customAssignInfo) {
+          alert('Este policial já está escalado neste serviço para este dia.');
+       }
+       return;
+    }
 
     const isFirstPM = !existingEscala;
     const needed = isFirstPM ? (service.cotasPorServico || 1) : 0;
@@ -239,7 +250,9 @@ const CreateEscala = () => {
         });
       }
 
-      setAssignmentModal(null);
+      if (!customAssignInfo) {
+         setAssignmentModal(null);
+      }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
       fetchData();
@@ -513,16 +526,27 @@ const CreateEscala = () => {
                           return (
                             <td 
                               key={date.toISOString()}
-                              onClick={() => !isOrd && setAssignmentModal({ 
-                                policemanId: v.policemanId, 
-                                policemanName: v.policeman?.nomeGuerra || 'PM',
-                                policemanMat: v.policeman?.matricula || '',
-                                date
-                              })}
+                              onClick={() => {
+                                if (isOrd) return;
+                                if (selectedServiceId) {
+                                  handleAssignService(selectedServiceId, { 
+                                    policemanId: v.policemanId, 
+                                    date 
+                                  });
+                                } else {
+                                  setAssignmentModal({ 
+                                    policemanId: v.policemanId, 
+                                    policemanName: v.policeman?.nomeGuerra || 'PM',
+                                    policemanMat: v.policeman?.matricula || '',
+                                    date
+                                  });
+                                }
+                              }}
                               className={cn(
                                 "relative p-0 border-r-2 border-b-2 border-black transition-all text-center",
                                 !isOrd ? "cursor-pointer hover:bg-slate-200" : "bg-slate-800",
-                                !escala && !isOrd ? "bg-slate-100/80" : ""
+                                !escala && !isOrd ? "bg-slate-100/80" : "",
+                                selectedServiceId && !isOrd && !escala ? "hover:scale-[1.02] hover:shadow-xl z-20" : ""
                               )}
                               style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
                             >
@@ -539,13 +563,19 @@ const CreateEscala = () => {
                                     <span className="text-white/30 text-[7px] font-black">ORD</span>
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center group-matrix-cell">
-                                       <span className="text-[10px] font-bold text-slate-300">0</span>
+                                       <span className={cn(
+                                          "text-[10px] font-bold transition-all",
+                                          selectedServiceId ? "text-pmpe-navy animate-pulse scale-125" : "text-slate-300"
+                                       )}>0</span>
                                     </div>
                                   )}
                                </div>
                                
                                {!isOrd && (
-                                 <div className="absolute inset-x-0 bottom-0 h-0.5 bg-pmpe-navy scale-x-0 group-matrix-cell-hover:scale-x-100 transition-transform origin-center" />
+                                 <div className={cn(
+                                    "absolute inset-x-0 bottom-0 h-0.5 scale-x-0 group-matrix-cell-hover:scale-x-100 transition-transform origin-center",
+                                    selectedServiceId ? "bg-emerald-500" : "bg-pmpe-navy"
+                                 )} />
                                )}
                             </td>
                           );
@@ -588,10 +618,20 @@ const CreateEscala = () => {
            {/* Services List Panel */}
            <div className="flex-1 bg-white rounded-[32px] border border-slate-200 shadow-xl overflow-hidden flex flex-col">
               <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                 <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-pmpe-gold" />
-                    Dicionário de Serviços ({activeTab})
-                 </h3>
+                 <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-[0.2em] flex items-center gap-2">
+                       <Shield className="w-4 h-4 text-pmpe-gold" />
+                       Dicionário de Serviços ({activeTab})
+                    </h3>
+                    {selectedServiceId && (
+                       <button 
+                         onClick={() => setSelectedServiceId(null)}
+                         className="text-[8px] font-black text-rose-500 uppercase hover:bg-rose-50 px-2 py-1 rounded-lg transition-colors border border-rose-100"
+                       >
+                          Limpar Seleção
+                       </button>
+                    )}
+                 </div>
                  <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                     <input 
@@ -612,17 +652,41 @@ const CreateEscala = () => {
                       return matchesTab && matchesMonth && matchesSearch;
                    })
                    .map(s => (
-                    <div key={s.id} className="p-3 rounded-2xl border border-slate-50 bg-slate-50/30 hover:bg-white hover:border-slate-200 hover:shadow-md transition-all group cursor-default">
+                    <div 
+                       key={s.id} 
+                       onClick={() => setSelectedServiceId(selectedServiceId === s.id ? null : s.id!)}
+                       className={cn(
+                          "p-3 rounded-2xl border transition-all group cursor-pointer",
+                          selectedServiceId === s.id 
+                            ? "bg-pmpe-navy border-pmpe-navy shadow-lg ring-2 ring-pmpe-navy/10 -translate-y-1" 
+                            : "border-slate-50 bg-slate-50/30 hover:bg-white hover:border-slate-200 hover:shadow-md"
+                       )}
+                    >
                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] shadow-sm transform group-hover:scale-110 transition-transform" style={{ backgroundColor: s.color, color: 'white' }}>
+                          <div 
+                             className={cn(
+                                "w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] shadow-sm transform transition-transform",
+                                selectedServiceId === s.id ? "scale-110 bg-white" : "group-hover:scale-110"
+                             )} 
+                             style={selectedServiceId === s.id ? { color: s.color } : { backgroundColor: s.color, color: 'white' }}
+                          >
                              {s.sigla}
                           </div>
                           <div>
-                             <p className="text-[9px] font-black text-pmpe-navy uppercase leading-tight">{s.nome}</p>
+                             <p className={cn(
+                                "text-[9px] font-black uppercase leading-tight",
+                                selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
+                             )}>{s.nome}</p>
                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">COTA: {s.cotasPorServico || 1}</span>
-                                <div className="w-1 h-1 bg-slate-200 rounded-full" />
-                                <span className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">{s.horarioInicio} - {s.horarioTermino}</span>
+                                <span className={cn(
+                                   "text-[7px] font-bold uppercase tracking-tighter",
+                                   selectedServiceId === s.id ? "text-white/60" : "text-slate-400"
+                                )}>COTA: {s.cotasPorServico || 1}</span>
+                                <div className={cn("w-1 h-1 rounded-full", selectedServiceId === s.id ? "bg-white/20" : "bg-slate-200")} />
+                                <span className={cn(
+                                   "text-[7px] font-bold uppercase tracking-tighter",
+                                   selectedServiceId === s.id ? "text-white/60" : "text-slate-400"
+                                )}>{s.horarioInicio} - {s.horarioTermino}</span>
                              </div>
                           </div>
                        </div>
@@ -640,11 +704,15 @@ const CreateEscala = () => {
                  )}
               </div>
               <div className="p-4 bg-slate-50 border-t border-slate-100">
-                 <div className="flex items-center gap-2 px-3 py-2 bg-pmpe-navy/5 rounded-xl">
-                    <Zap className="w-3 h-3 text-pmpe-gold animate-pulse" />
-                    <p className="text-[7px] font-bold text-pmpe-navy uppercase leading-tight italic">
-                       Clique no "0" na matriz para lançar estes serviços.
-                    </p>
+                 <div className="flex items-center gap-4 px-3 py-2 bg-pmpe-navy/5 rounded-xl">
+                    <Zap className={cn("w-3 h-3 text-pmpe-gold", selectedServiceId && "animate-pulse")} />
+                    <div className="flex-1">
+                       <p className="text-[7px] font-bold text-pmpe-navy uppercase leading-tight italic">
+                          {selectedServiceId 
+                            ? "MODO PINCEL ATIVO: Clique no '0' para pintar a escala."
+                            : "Clique no '0' na matriz para lançar estes serviços."}
+                       </p>
+                    </div>
                  </div>
               </div>
            </div>
@@ -747,6 +815,25 @@ const CreateEscala = () => {
                      </div>
 
                      <div className="grid grid-cols-1 gap-3">
+                        {services.filter(s => {
+                           const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
+                           const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
+                           const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
+                           const isCorrectType = s.tipo?.toUpperCase() === activeTab;
+                           const matchesMonth = s.month === mKey;
+                           const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
+                           
+                           return isActiveDay && !isAlreadyIn && isCorrectType && matchesMonth && matchesSearch;
+                        }).length === 0 && (
+                           <div className="p-12 text-center bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
+                              <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                                 <AlertCircle className="w-8 h-8 text-slate-300" />
+                              </div>
+                              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-relaxed px-6">
+                                 Nenhum serviço de {activeTab} disponível para esta data específica. Clique nos serviços ao lado para gerenciar as datas ativas.
+                              </p>
+                           </div>
+                        )}
                         {services.filter(s => {
                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
                            const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
