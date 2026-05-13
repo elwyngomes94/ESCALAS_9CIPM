@@ -79,6 +79,7 @@ const CreateEscala = () => {
     PJES_DECRETO: 0,
     OPS: 0
   });
+  const [serviceSpecificUsage, setServiceSpecificUsage] = useState<Record<string, number>>({});
 
   const mKey = format(currentMonth, 'yyyy-MM');
 
@@ -153,8 +154,16 @@ const CreateEscala = () => {
       setUnitQuotas(qSettings);
 
       let usage = { PJES_MP: 0, PJES_FORUM: 0, PJES_ESCOLAR: 0, PJES_DECRETO: 0, OPS: 0 };
+      const serviceUsage: Record<string, number> = {};
+
       logsSnap.docs.forEach(d => {
         const log = d.data() as QuotaLog;
+        
+        // Track per service type
+        if (log.serviceTypeId) {
+           serviceUsage[log.serviceTypeId] = (serviceUsage[log.serviceTypeId] || 0) + log.quantidade;
+        }
+
         if (log.tipo === 'OPS') usage.OPS += log.quantidade;
         else if (log.tipo === 'PJES') {
           if (log.pjesSubtype === 'MP') usage.PJES_MP += log.quantidade;
@@ -164,6 +173,7 @@ const CreateEscala = () => {
         }
       });
       setCurrentUsage(usage);
+      setServiceSpecificUsage(serviceUsage);
 
     } catch (err) {
       console.error(err);
@@ -197,36 +207,47 @@ const CreateEscala = () => {
        return;
     }
 
-    const isFirstPM = !existingEscala;
-    const needed = isFirstPM ? (service.cotasPorServico || 1) : 0;
+    const needed = service.cotasPorServico || 1;
     
-    if (isFirstPM) {
-      const type = service.tipo as 'PJES' | 'OPS';
-      let limit = 0;
-      let used = 0;
+    const type = service.tipo as 'PJES' | 'OPS';
+    
+    // 1. Check Service SPECIFIC Limit (PRIORITY as per user request)
+    if (service.quotaMensalLimit && service.quotaMensalLimit > 0) {
+        const usedByThisService = serviceSpecificUsage[serviceId] || 0;
+        if (usedByThisService + needed > service.quotaMensalLimit) {
+          alert(`Erro: Limite de cota mensal para o serviço ${service.sigla} atingido (${usedByThisService}/${service.quotaMensalLimit}).`);
+          return;
+        }
+    }
 
-      if (type === 'OPS') { limit = unitQuotas?.opsTotal || 0; used = currentUsage.OPS; }
-      else {
-        const subtype = service.pjesSubtype;
-        if (subtype === 'MP') { limit = unitQuotas?.pjesMPTotal || 0; used = currentUsage.PJES_MP; }
-        else if (subtype === 'FORUM') { limit = unitQuotas?.pjesForumTotal || 0; used = currentUsage.PJES_FORUM; }
-        else if (subtype === 'ESCOLAR') { limit = unitQuotas?.pjesEscolarTotal || 0; used = currentUsage.PJES_ESCOLAR; }
-        else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
-      }
+    // 2. Check Unit Global Limit (fallback/secondary)
+    let limit = 0;
+    let used = 0;
 
-      if (used + needed > limit) {
-        alert(`Erro: Cota insuficiente para ${service.sigla}.`);
-        return;
-      }
+    if (type === 'OPS') { limit = unitQuotas?.opsTotal || 0; used = currentUsage.OPS; }
+    else {
+      const subtype = service.pjesSubtype;
+      if (subtype === 'MP') { limit = unitQuotas?.pjesMPTotal || 0; used = currentUsage.PJES_MP; }
+      else if (subtype === 'FORUM') { limit = unitQuotas?.pjesForumTotal || 0; used = currentUsage.PJES_FORUM; }
+      else if (subtype === 'ESCOLAR') { limit = unitQuotas?.pjesEscolarTotal || 0; used = currentUsage.PJES_ESCOLAR; }
+      else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
+    }
+
+    // Only alert global limit if it's actually set (greater than 0)
+    if (limit > 0 && used + needed > limit) {
+      alert(`Erro: Cota da UNIDADE insuficiente para ${service.sigla}.`);
+      return;
     }
 
     setSubmitting(true);
     try {
+      let finalEscalaId = '';
       if (existingEscala) {
         await updateDoc(doc(db, 'escalas', existingEscala.id!), {
           policemenIds: [...new Set([...existingEscala.policemenIds, policemanId])],
           updatedAt: serverTimestamp()
         });
+        finalEscalaId = existingEscala.id!;
       } else {
         const docRef = await addDoc(collection(db, 'escalas'), {
           serviceTypeId: serviceId,
@@ -235,20 +256,23 @@ const CreateEscala = () => {
           observations: '',
           createdAt: serverTimestamp()
         });
-        
-        await addDoc(collection(db, 'quotaLogs'), {
-          serviceTypeId: serviceId,
-          serviceName: service.nome,
-          escalaId: docRef.id,
-          tipo: service.tipo,
-          pjesSubtype: service.pjesSubtype,
-          quantidade: needed,
-          usuarioUid: auth.currentUser?.uid,
-          usuarioEmail: auth.currentUser?.email,
-          data: serverTimestamp(),
-          month: format(date, 'yyyy-MM')
-        });
+        finalEscalaId = docRef.id;
       }
+      
+      // ALWAYS create a quota log for every person added
+      await addDoc(collection(db, 'quotaLogs'), {
+        serviceTypeId: serviceId,
+        serviceName: service.nome,
+        escalaId: finalEscalaId,
+        tipo: service.tipo,
+        pjesSubtype: service.pjesSubtype,
+        quantidade: needed,
+        usuarioUid: auth.currentUser?.uid,
+        usuarioEmail: auth.currentUser?.email,
+        policemanId: policemanId, // Also track WHO used the quota
+        data: serverTimestamp(),
+        month: format(date, 'yyyy-MM')
+      });
 
       if (!customAssignInfo) {
          setAssignmentModal(null);
@@ -268,7 +292,17 @@ const CreateEscala = () => {
     const escala = allEscalasOfMonth.find(e => e.id === escalaId);
     if (!escala) return;
 
+    setLoading(true);
     try {
+      // 1. Delete associated quota logs
+      const logQ = query(
+        collection(db, 'quotaLogs'), 
+        where('escalaId', '==', escalaId),
+        where('policemanId', '==', policemanId)
+      );
+      const logSnap = await getDocs(logQ);
+      
+      // 2. Update or delete escala document
       if (escala.policemenIds.length <= 1) {
         await deleteDoc(doc(db, 'escalas', escalaId));
       } else {
@@ -276,10 +310,18 @@ const CreateEscala = () => {
           policemenIds: escala.policemenIds.filter(id => id !== policemanId)
         });
       }
+
+      // 3. Batch delete logs
+      for (const logDoc of logSnap.docs) {
+        await deleteDoc(logDoc.ref);
+      }
+      
       fetchData();
       setAssignmentModal(null);
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 

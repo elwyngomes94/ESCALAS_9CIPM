@@ -57,6 +57,7 @@ const ServiceTypes = () => {
     sigla: 'PTR',
     vagasNecessarias: 2,
     cotasPorServico: 1,
+    quotaMensalLimit: 0,
     isActive: true
   });
 
@@ -74,6 +75,7 @@ const ServiceTypes = () => {
           activeDates: d.activeDates || [],
           month: d.month || format(new Date(), 'yyyy-MM'),
           cotasPorServico: d.cotasPorServico ?? d.cotasPorEscala ?? 1,
+          quotaMensalLimit: d.quotaMensalLimit || 0,
           isActive: d.isActive ?? true
         } as ServiceType;
       });
@@ -163,6 +165,7 @@ const ServiceTypes = () => {
         sigla: s.sigla || 'PTR',
         vagasNecessarias: s.vagasNecessarias || 2,
         cotasPorServico: s.cotasPorServico ?? 1,
+        quotaMensalLimit: s.quotaMensalLimit || 0,
         isActive: s.isActive ?? true
       });
     } else {
@@ -244,6 +247,7 @@ const ServiceTypes = () => {
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Tipo</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Subtipo</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Cotas/Serv</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Limite Mensal</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Ativação</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Carga Horária</th>
@@ -277,6 +281,11 @@ const ServiceTypes = () => {
                   <td className="px-6 py-4 text-center">
                     <span className="text-[11px] font-black text-pmpe-navy bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                       {s.cotasPorServico}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="text-[11px] font-black text-pmpe-red bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                      {s.quotaMensalLimit || '-'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
@@ -488,6 +497,18 @@ const ServiceTypes = () => {
                         value={formData.month}
                         onChange={(e) => setFormData({...formData, month: e.target.value})}
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1.5 font-bold">Cota Mensal Máxima (Limitação)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        required
+                        value={formData.quotaMensalLimit}
+                        onChange={(e) => setFormData({...formData, quotaMensalLimit: parseFloat(e.target.value)})}
+                        className="w-full px-4 py-2 border-2 border-emerald-100 bg-emerald-50/30 rounded-lg text-sm font-black text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all shadow-inner"
+                        placeholder="Ex: 100"
                       />
                     </div>
                     <div>
