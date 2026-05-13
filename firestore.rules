@@ -29,7 +29,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128;
     }
 
     function incoming() {
@@ -42,50 +42,39 @@ service cloud.firestore {
 
     // Validation Helpers
     function isValidPoliceman(d) {
-      return d.nomeCompleto is string && d.nomeCompleto.size() <= 200 &&
-             d.nomeGuerra is string && d.nomeGuerra.size() <= 50 &&
-             d.graduacaoPosto is string && d.graduacaoPosto.size() <= 50 &&
-             d.matricula is string && d.matricula.size() <= 20 &&
-             d.telefone is string && d.telefone.size() <= 20 &&
-             d.situacao is string && d.situacao.size() <= 50;
+      return d.nomeCompleto is string && d.nomeGuerra is string && 
+             d.graduacaoPosto is string && d.matricula is string;
     }
 
     function isValidServiceType(d) {
-      return d.nome is string && d.nome.size() <= 100 &&
-             d.tipo in ['PJES', 'OPS', 'ORDINARIO', 'EXTRA'] &&
-             d.cidade is string && d.cidade.size() <= 100 &&
-             d.horarioInicio is string &&
-             d.horarioTermino is string &&
-             d.cotasPorEscala is number &&
-             d.isActive is bool &&
-             (d.observacoes == null || d.observacoes is string);
+      return d.nome is string && d.tipo is string && d.sigla is string &&
+             d.cotasPorServico is number && d.month is string;
     }
 
     function isValidQuotaLog(d) {
-      return isValidId(d.serviceTypeId) &&
-             d.tipo in ['PJES', 'OPS'] &&
-             d.quantidade is number &&
-             d.usuarioUid is string &&
-             d.month is string;
+      return d.serviceTypeId is string && d.tipo is string &&
+             d.quantidade is number && d.month is string &&
+             (d.escalaId == null || d.escalaId is string) &&
+             (d.policemanId == null || d.policemanId is string) &&
+             (d.data == null || d.data is timestamp);
     }
 
     function isValidQuotaSettings(d) {
-      return d.month is string &&
-             d.pjesTotal is number &&
-             d.opsTotal is number;
+      return d.month is string && d.opsTotal is number;
     }
 
     function isValidVolunteer(d) {
-      return isValidId(d.policemanId) &&
-             d.type in ['PJES', 'OPS'] &&
-             d.cotas is number && d.cotas >= 1 && d.cotas <= 12;
+      return d.policemanId is string && d.type is string &&
+             d.cotas is number;
     }
 
     function isValidEscala(d) {
-      return isValidId(d.serviceTypeId) &&
+      return d.serviceTypeId is string &&
              d.policemenIds is list && d.policemenIds.size() > 0 &&
              d.date is timestamp &&
-             (d.observations == null || d.observations is string);
+             (d.observations == null || d.observations is string) &&
+             (d.createdAt == null || d.createdAt is timestamp) &&
+             (d.updatedAt == null || d.updatedAt is timestamp);
     }
 
     // Rules
@@ -100,25 +89,25 @@ service cloud.firestore {
 
     match /policemen/{policemanId} {
       allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(policemanId) && 
+      allow create, update, delete: if isAdmin() && isValidId(policemanId) && 
                                     (request.method == 'delete' || isValidPoliceman(incoming()));
     }
 
     match /serviceTypes/{serviceTypeId} {
       allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(serviceTypeId) &&
+      allow create, update, delete: if isAdmin() && isValidId(serviceTypeId) &&
                                     (request.method == 'delete' || isValidServiceType(incoming()));
     }
 
     match /volunteers/{volunteerId} {
       allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(volunteerId) &&
+      allow create, update, delete: if isAdmin() && isValidId(volunteerId) &&
                                     (request.method == 'delete' || isValidVolunteer(incoming()));
     }
 
     match /escalas/{escalaId} {
       allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(escalaId) &&
+      allow create, update, delete: if isAdmin() && isValidId(escalaId) &&
                                     (request.method == 'delete' || isValidEscala(incoming()));
     }
 

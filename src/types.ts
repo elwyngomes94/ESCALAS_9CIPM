@@ -47,7 +47,6 @@ export interface ServiceType {
   observacoes?: string;
   vagasNecessarias?: number;
   cotasPorServico: number;
-  quotaMensalLimit?: number;
   isActive: boolean;
   createdAt?: any;
 }

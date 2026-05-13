@@ -144,8 +144,8 @@ const CreateEscala = () => {
         setVolunteers(snap.docs.map(d => ({ 
           id: d.id, 
           ...d.data(),
-          policeman: policemen[d.data().policemanId] // Note: policemen might be empty on first run, but filteredVolunteers uses it via useMemo anyway
-        } as Volunteer)));
+          policeman: policemen[d.data().policemanId]
+        } as any)));
       }
     );
 
@@ -213,36 +213,37 @@ const CreateEscala = () => {
     if (!service) return;
 
     const dateStr = format(date, 'yyyy-MM-dd');
+    const needed = service.cotasPorServico || 1;
     
     // 1. Strict Duplication Check (Check ALL scales for this person on this day)
-    const alreadyScaledToday = allEscalasOfMonth.filter(e => 
-      format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && e.policemenIds.includes(policemanId)
+    const typeBeingAssigned = service.tipo; // 'PJES' or 'OPS'
+    const alreadyScaledInSameType = allEscalasOfMonth.find(e => 
+      format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
+      e.policemenIds.includes(policemanId) &&
+      e.service?.tipo === typeBeingAssigned
     );
 
-    if (alreadyScaledToday.length > 0) {
-       // Allow scaling if it's a DIFFERENT service? 
-       // Usually no, unless explicitly allowed.
-       // The user said "Impedir escala duplicada".
-       alert(`Este policial já possui uma escala para este dia (${alreadyScaledToday[0].service?.sigla}).`);
+    if (alreadyScaledInSameType) {
+       alert(`Este policial já possui uma escala de ${typeBeingAssigned} para este dia (${alreadyScaledInSameType.service?.sigla}).`);
        return;
     }
 
     const existingEscala = allEscalasOfMonth.find(e => 
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
-
-    const needed = service.cotasPorServico || 1;
-    const type = service.tipo as 'PJES' | 'OPS';
     
-    // 2. Quota Checks
-    if (service.quotaMensalLimit && service.quotaMensalLimit > 0) {
-        const usedByThisService = serviceSpecificUsage[serviceId] || 0;
-        if (usedByThisService + needed > service.quotaMensalLimit) {
-          alert(`Erro: Limite de cota mensal para o serviço ${service.sigla} atingido (${usedByThisService}/${service.quotaMensalLimit}).`);
-          return;
-        }
+    // 3. Vacancy Check (vagasNecessarias)
+    const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
+    const maxSlots = service.vagasNecessarias || 999; // Default to large number if not set
+
+    if (currentSlotsUsed >= maxSlots) {
+      alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
+      return;
     }
 
+    const type = service.tipo as 'PJES' | 'OPS';
+    
+    // Quota Checks
     let limit = 0;
     let used = 0;
     if (type === 'OPS') { limit = unitQuotas?.opsTotal || 0; used = currentUsage.OPS; }
@@ -261,7 +262,7 @@ const CreateEscala = () => {
 
     setSubmitting(true);
     try {
-      let finalEscalaId = '';
+      let currentEscalaId = '';
       if (existingEscala) {
         // Double check policemenIds to prevent race condition
         if (!existingEscala.policemenIds.includes(policemanId)) {
@@ -270,7 +271,7 @@ const CreateEscala = () => {
             updatedAt: serverTimestamp()
           });
         }
-        finalEscalaId = existingEscala.id!;
+        currentEscalaId = existingEscala.id!;
       } else {
         const docRef = await addDoc(collection(db, 'escalas'), {
           serviceTypeId: serviceId,
@@ -279,18 +280,18 @@ const CreateEscala = () => {
           observations: '',
           createdAt: serverTimestamp()
         });
-        finalEscalaId = docRef.id;
+        currentEscalaId = docRef.id;
       }
       
       await addDoc(collection(db, 'quotaLogs'), {
         serviceTypeId: serviceId,
         serviceName: service.nome,
-        escalaId: finalEscalaId,
+        escalaId: currentEscalaId,
         tipo: service.tipo,
-        pjesSubtype: service.pjesSubtype,
+        pjesSubtype: service.pjesSubtype || '',
         quantidade: needed,
-        usuarioUid: auth.currentUser?.uid,
-        usuarioEmail: auth.currentUser?.email,
+        usuarioUid: auth.currentUser?.uid || 'anonymous',
+        usuarioEmail: auth.currentUser?.email || 'anonymous',
         policemanId: policemanId,
         data: serverTimestamp(),
         month: format(date, 'yyyy-MM')
@@ -303,8 +304,8 @@ const CreateEscala = () => {
       setTimeout(() => setSuccess(false), 2000);
       // No need for fetchData() as onSnapshot handles it
     } catch (err) {
-      console.error(err);
-      alert('Erro ao salvar escala. Tente novamente.');
+      console.error("Scale assignment error:", err);
+      handleFirestoreError(err, OperationType.WRITE, 'escalas/quotaLogs');
     } finally {
       setSubmitting(false);
     }
@@ -632,14 +633,24 @@ const CreateEscala = () => {
                         {days.map(date => {
                           const dayNum = getDate(date);
                           const isOrd = (ordinarySchedules[v.policemanId] || []).includes(dayNum);
-                          const escala = scaledPMRecords.find(e => isSameDay(e.date.toDate(), date));
+                          const scales = scaledPMRecords.filter(e => isSameDay(e.date.toDate(), date));
                           const currentSelectedService = selectedServiceId ? services.find(s => s.id === selectedServiceId) : null;
                           const dateStr = format(date, 'yyyy-MM-dd');
+
+                          // Vacancy check for the selected service on this specific date
+                          const escalaToday = allEscalasOfMonth.find(e => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
+                          const slotsUsed = escalaToday?.policemenIds.length || 0;
+                          const slotsMax = currentSelectedService?.vagasNecessarias || 0;
+                          const isFull = slotsMax > 0 && slotsUsed >= slotsMax;
+
                           const isServiceActiveOnThisDay = currentSelectedService ? (
                              currentSelectedService.activationType === 'ALL' || 
                              (currentSelectedService.activeDates || []).includes(dateStr)
                           ) : false;
                           
+                          // Check if person already has a scale of the SAME type as currently selected
+                          const hasSameTypeScale = currentSelectedService && scales.some(s => s.service?.tipo === currentSelectedService.tipo);
+
                           const isCurrentlyTarget = assignmentModal?.policemanId === v.policemanId && isSameDay(assignmentModal.date, date);
                           const isSubmittingThisCell = submitting && isCurrentlyTarget;
                           
@@ -647,7 +658,7 @@ const CreateEscala = () => {
                             <td 
                               key={date.toISOString()}
                               onDragOver={(e) => {
-                                if (!isOrd && !escala) {
+                                if (!isOrd && !hasSameTypeScale) {
                                   e.preventDefault();
                                   e.currentTarget.classList.add('bg-emerald-100');
                                 }
@@ -656,18 +667,35 @@ const CreateEscala = () => {
                                 e.currentTarget.classList.remove('bg-emerald-100');
                               }}
                               onDrop={(e) => {
-                                if (isOrd || escala || submitting) return;
+                                if (isOrd || submitting) return;
                                 e.preventDefault();
                                 e.currentTarget.classList.remove('bg-emerald-100');
                                 const draggedServiceId = e.dataTransfer.getData('serviceId');
                                 if (draggedServiceId) {
                                   // Validation for active day
                                   const ds = services.find(s => s.id === draggedServiceId);
+                                  
+                                  // Specific type check for drop
+                                  const alreadyHasType = ds && scales.some(s => s.service?.tipo === ds.tipo);
+                                  if (alreadyHasType) {
+                                    alert(`Este policial já possui uma escala de ${ds.tipo} para este dia.`);
+                                    return;
+                                  }
+
                                   const dStr = format(date, 'yyyy-MM-dd');
                                   const active = ds && (ds.activationType === 'ALL' || (ds.activeDates || []).includes(dStr));
                                   
                                   if (!active) {
                                     alert('Este serviço não está ativo para esta data específica.');
+                                    return;
+                                  }
+
+                                  // Vacancy Check for drop
+                                  const scaleToday = allEscalasOfMonth.find(e => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
+                                  const used = scaleToday?.policemenIds.length || 0;
+                                  const max = ds.vagasNecessarias || 0;
+                                  if (max > 0 && used >= max) {
+                                    alert(`Este serviço (${ds.sigla}) já atingiu o limite de vagas para este dia.`);
                                     return;
                                   }
 
@@ -684,6 +712,17 @@ const CreateEscala = () => {
                                     alert('Este serviço não está configurado para estar ativo nesta data.');
                                     return;
                                   }
+
+                                  if (isFull) {
+                                    alert('Todas as vagas para este serviço já foram preenchidas nesta data.');
+                                    return;
+                                  }
+                                  
+                                  if (hasSameTypeScale) {
+                                     alert(`Este policial já possui uma escala de ${currentSelectedService?.tipo} para este dia.`);
+                                     return;
+                                  }
+
                                   handleAssignService(selectedServiceId, { 
                                     policemanId: v.policemanId, 
                                     date 
@@ -698,27 +737,60 @@ const CreateEscala = () => {
                                 }
                               }}
                               className={cn(
-                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-10 w-10",
+                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-12 w-12",
                                 !isOrd ? "cursor-pointer" : "bg-slate-800",
-                                !escala && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
-                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !escala ? "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10" : "",
+                                scales.length === 0 && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
+                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? (
+                                  isFull 
+                                    ? "bg-rose-50/70 ring-inset ring-2 ring-rose-500/30 cursor-not-allowed opacity-60" 
+                                    : "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10"
+                                ) : "",
                                 isSubmittingThisCell ? "bg-amber-100" : ""
                               )}
-                              style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
                             >
-                               <div className="w-full h-full flex items-center justify-center font-black text-[9px] uppercase tracking-tighter">
-                                  {isSubmittingThisCell ? (
-                                    <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                                  ) : escala ? (
-                                    <motion.span 
-                                      initial={{ scale: 0.8, opacity: 0 }} 
-                                      animate={{ scale: 1, opacity: 1 }}
-                                      className="text-white drop-shadow-sm px-1 truncate"
-                                    >
-                                      {escala.service?.sigla || 'ESC'}
-                                    </motion.span>
+                               <div className="w-full h-full flex flex-col items-stretch justify-center font-black text-[8px] uppercase tracking-tighter overflow-hidden">
+                                  {isSubmittingThisCell && scales.length === 0 ? (
+                                    <div className="flex items-center justify-center h-full">
+                                      <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                    </div>
+                                  ) : scales.length > 0 ? (
+                                    <div className="flex flex-col h-full w-full">
+                                      {scales.map((s, idx) => (
+                                        <motion.div 
+                                          key={s.id || idx}
+                                          initial={{ scale: 0.8, opacity: 0 }} 
+                                          animate={{ scale: 1, opacity: 1 }}
+                                          className="flex-1 flex flex-col items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0 py-0.5"
+                                          style={{ backgroundColor: s.service?.color || '#334155' }}
+                                        >
+                                          <div className="flex items-center gap-1">
+                                            <span>{s.service?.sigla || 'ESC'}</span>
+                                            {s.service?.vagasNecessarias && (
+                                              <span className="text-[7px] bg-black/20 px-1 rounded">
+                                                {s.policemenIds.length}/{s.service.vagasNecessarias}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {s.service?.vagasNecessarias && s.policemenIds.length >= s.service.vagasNecessarias && (
+                                            <div className="absolute top-0 right-0 p-0.5">
+                                              <Check className="w-2 h-2 text-emerald-400" />
+                                            </div>
+                                          )}
+                                        </motion.div>
+                                      ))}
+                                      {isSubmittingThisCell && (
+                                        <div className="bg-amber-100 flex items-center justify-center py-0.5">
+                                          <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                        </div>
+                                      )}
+                                    </div>
                                   ) : isOrd ? (
                                     <span className="text-white/30 text-[7px] font-black">ORD</span>
+                                  ) : isFull && selectedServiceId ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-rose-50/50">
+                                      <span className="text-[7px] text-rose-500 font-black leading-none mb-0.5">LOTADO</span>
+                                      <span className="text-[9px] font-black text-rose-600">{slotsUsed}/{slotsMax}</span>
+                                    </div>
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center group-matrix-cell">
                                        <span className={cn(
@@ -843,17 +915,9 @@ const CreateEscala = () => {
                           <div className="flex-1 min-w-0">
                              <div className="flex items-center justify-between gap-2 overflow-hidden">
                                 <p className={cn(
-                                   "text-[9px] font-black uppercase leading-tight truncate",
+                                   "text-[10px] font-black uppercase leading-tight truncate",
                                    selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
                                 )}>{s.nome}</p>
-                                {s.quotaMensalLimit ? (
-                                   <span className={cn(
-                                      "text-[7px] font-black px-1.5 py-0.5 rounded shrink-0",
-                                      selectedServiceId === s.id ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                                   )}>
-                                      {(s.quotaMensalLimit || 0) - (serviceSpecificUsage[s.id!] || 0)} DISP.
-                                   </span>
-                                ) : null}
                              </div>
                              <div className="flex items-center gap-2 mt-1">
                                 <span className={cn(
