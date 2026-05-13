@@ -568,6 +568,27 @@ const CreateEscala = () => {
                           return (
                             <td 
                               key={date.toISOString()}
+                              onDragOver={(e) => {
+                                if (!isOrd && !escala) {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.add('bg-emerald-100');
+                                }
+                              }}
+                              onDragLeave={(e) => {
+                                e.currentTarget.classList.remove('bg-emerald-100');
+                              }}
+                              onDrop={(e) => {
+                                if (isOrd || escala) return;
+                                e.preventDefault();
+                                e.currentTarget.classList.remove('bg-emerald-100');
+                                const draggedServiceId = e.dataTransfer.getData('serviceId');
+                                if (draggedServiceId) {
+                                  handleAssignService(draggedServiceId, { 
+                                    policemanId: v.policemanId, 
+                                    date 
+                                  });
+                                }
+                              }}
                               onClick={() => {
                                 if (isOrd) return;
                                 if (selectedServiceId) {
@@ -706,8 +727,14 @@ const CreateEscala = () => {
                     >
                        <div className="flex items-center gap-3">
                           <div 
+                             draggable
+                             onDragStart={(e) => {
+                                e.dataTransfer.setData('serviceId', s.id!);
+                                setSelectedServiceId(s.id!);
+                             }}
+                             onDragEnd={() => setSelectedServiceId(null)}
                              className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] shadow-sm transform transition-transform",
+                                "w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] shadow-sm transform transition-transform cursor-grab active:cursor-grabbing",
                                 selectedServiceId === s.id ? "scale-110 bg-white" : "group-hover:scale-110"
                              )} 
                              style={selectedServiceId === s.id ? { color: s.color } : { backgroundColor: s.color, color: 'white' }}
