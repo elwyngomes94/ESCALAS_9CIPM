@@ -144,8 +144,8 @@ const CreateEscala = () => {
         setVolunteers(snap.docs.map(d => ({ 
           id: d.id, 
           ...d.data(),
-          policeman: policemen[d.data().policemanId] // Note: policemen might be empty on first run, but filteredVolunteers uses it via useMemo anyway
-        } as Volunteer)));
+          policeman: policemen[d.data().policemanId]
+        } as any)));
       }
     );
 
