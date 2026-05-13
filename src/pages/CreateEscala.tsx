@@ -365,213 +365,278 @@ const CreateEscala = () => {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
+      <div className="flex-1 overflow-hidden flex flex-row p-6 gap-6">
         
-        {/* Statistics Panels Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0">
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-pmpe-navy/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
-              <div className="p-3 bg-pmpe-navy rounded-2xl text-pmpe-gold relative z-10 shadow-lg shadow-pmpe-navy/20">
-                 <Users className="w-5 h-5" />
-              </div>
-              <div className="relative z-10">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Efetivo {activeTab}</p>
-                 <p className="text-xl font-black text-pmpe-navy">{filteredVolunteers.length}</p>
-              </div>
-           </div>
-           
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
-              <div className="p-3 bg-emerald-100 rounded-2xl text-emerald-600 border border-emerald-200 relative z-10 shadow-lg shadow-emerald-500/10">
-                 <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div className="relative z-10">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Escalados {activeTab}</p>
-                 <p className="text-xl font-black text-pmpe-navy">
-                    {allEscalasOfMonth.filter(e => e.service?.tipo === activeTab).length}
-                 </p>
-              </div>
-           </div>
+        {/* Left Column (Matrix + Search) */}
+        <div className="flex-1 flex flex-col gap-6 overflow-hidden">
+          {/* Statistics Panels Row */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0">
+             <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-pmpe-navy/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                <div className="p-3 bg-pmpe-navy rounded-2xl text-pmpe-gold relative z-10 shadow-lg shadow-pmpe-navy/20">
+                   <Users className="w-5 h-5" />
+                </div>
+                <div className="relative z-10">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Efetivo {activeTab}</p>
+                   <p className="text-xl font-black text-pmpe-navy">{filteredVolunteers.length}</p>
+                </div>
+             </div>
+             
+             <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                <div className="p-3 bg-emerald-100 rounded-2xl text-emerald-600 border border-emerald-200 relative z-10 shadow-lg shadow-emerald-500/10">
+                   <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="relative z-10">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Escalados {activeTab}</p>
+                   <p className="text-xl font-black text-pmpe-navy">
+                      {allEscalasOfMonth.filter(e => e.service?.tipo === activeTab).length}
+                   </p>
+                </div>
+             </div>
 
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
-              <div className="p-3 bg-rose-100 rounded-2xl text-rose-600 border border-rose-200 relative z-10 shadow-lg shadow-rose-500/10">
-                 <Zap className="w-5 h-5" />
+             <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                <div className="p-3 bg-rose-100 rounded-2xl text-rose-600 border border-rose-200 relative z-10 shadow-lg shadow-rose-500/10">
+                   <Zap className="w-5 h-5" />
+                </div>
+                <div className="relative z-10">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Total {activeTab} Unidade</p>
+                   <div className="flex items-baseline gap-1">
+                      <p className="text-xl font-black text-pmpe-navy font-mono">
+                         {activeTab === 'PJES' ? totalPjesUsed : currentUsage.OPS} 
+                      </p>
+                      <p className="text-[10px] font-bold text-slate-300"> / {activeTab === 'PJES' ? totalPjesLimit : unitQuotas?.opsTotal}</p>
+                   </div>
+                </div>
+             </div>
+
+             <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-pmpe-gold/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                <div className="p-3 bg-pmpe-gold/20 rounded-2xl text-amber-600 border border-amber-200 relative z-10 shadow-lg shadow-pmpe-gold/20">
+                   <Target className="w-5 h-5" />
+                </div>
+                <div className="relative z-10">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Saldo Disponível</p>
+                   <p className="text-xl font-black text-emerald-600 font-mono">
+                      {activeTab === 'PJES' ? (totalPjesLimit - totalPjesUsed) : ((unitQuotas?.opsTotal || 0) - currentUsage.OPS)}
+                   </p>
+                </div>
+             </div>
+          </div>
+
+          {/* Operational Matrix Board */}
+          <div className="flex-1 bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col relative">
+            
+            <div className="flex-1 overflow-auto custom-matrix-scroll p-1">
+              <table className="w-full border-separate border-spacing-0 text-[10px] font-sans">
+                <thead className="sticky top-0 z-[20]">
+                  <tr className="bg-pmpe-navy text-white h-14">
+                    {/* Fixed Columns Headers */}
+                    <th className="sticky left-0 z-30 p-2 min-w-[48px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black">GRA.</th>
+                    <th className="sticky left-[48px] z-30 p-2 min-w-[70px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">MAT.</th>
+                    <th className="sticky left-[118px] z-30 p-4 min-w-[150px] bg-pmpe-navy text-left font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">EFETIVO</th>
+                    
+                    {/* Stats Columns Headers */}
+                    <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">SOLIC.</th>
+                    <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">DISP.</th>
+                    <th className="p-2 min-w-[48px] bg-emerald-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">ESCAL.</th>
+                    <th className="p-2 min-w-[48px] bg-rose-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">A ESC.</th>
+                    
+                    {/* Days Multi-Column (Matrix) */}
+                    {days.map(day => {
+                      const isWknd = isWeekend(day);
+                      return (
+                        <th 
+                          key={day.toISOString()} 
+                          className={cn(
+                            "min-w-[42px] p-1 border-b-2 border-black border-l-2 border-black text-center transition-colors",
+                            isWknd ? "bg-red-600" : "bg-blue-700 hover:bg-blue-800"
+                          )}
+                        >
+                           <div className="flex flex-col items-center">
+                              <span className="text-[6px] font-black opacity-60 mb-0.5 leading-none uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
+                              <span className="text-[11px] font-black leading-none">{format(day, 'dd')}</span>
+                           </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                     <tr>
+                       <td colSpan={days.length + 7} className="p-32 text-center">
+                          <div className="flex flex-col items-center gap-6">
+                             <div className="w-16 h-16 border-4 border-pmpe-navy/10 border-t-pmpe-navy rounded-full animate-spin" />
+                             <p className="text-sm font-black text-pmpe-navy uppercase tracking-[0.2em] animate-pulse">Processando Matriz Operacional...</p>
+                          </div>
+                       </td>
+                     </tr>
+                  ) : filteredVolunteers.map(v => {
+                    const scaledPMRecords = allEscalasOfMonth.filter(e => e.policemenIds.includes(v.policemanId));
+                    const scaledCount = scaledPMRecords.length;
+                    const solicted = v.cotas || 0;
+                    const remaining = solicted - scaledCount;
+
+                    return (
+                      <tr key={v.id} className="h-10 hover:bg-slate-50 transition-colors group">
+                        {/* Fixed ID Info */}
+                        <td className="sticky left-0 z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-black text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
+                        <td className="sticky left-[48px] z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.matricula}</td>
+                        <td className="sticky left-[118px] z-10 p-2 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-4 border-r-2 border-b-2 border-black truncate">
+                           {v.policeman?.nomeGuerra}
+                        </td>
+
+                        {/* Stats Dynamic Columns */}
+                        <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r-2 border-b-2 border-black">{solicted}</td>
+                        <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r-2 border-b-2 border-black">{days.length - (ordinarySchedules[v.policemanId]?.length || 0)}</td>
+                        <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r-2 border-b-2 border-black">{scaledCount}</td>
+                        <td className={cn(
+                          "text-center font-black border-r-2 border-b-2 border-black",
+                          remaining > 0 ? "bg-rose-50/50 text-rose-600" : "bg-emerald-50 text-emerald-500"
+                        )}>{remaining}</td>
+
+                        {/* Matrix cells for each day */}
+                        {days.map(date => {
+                          const dayNum = getDate(date);
+                          const isOrd = (ordinarySchedules[v.policemanId] || []).includes(dayNum);
+                          const escala = scaledPMRecords.find(e => isSameDay(e.date.toDate(), date));
+                          
+                          return (
+                            <td 
+                              key={date.toISOString()}
+                              onClick={() => !isOrd && setAssignmentModal({ 
+                                policemanId: v.policemanId, 
+                                policemanName: v.policeman?.nomeGuerra || 'PM',
+                                policemanMat: v.policeman?.matricula || '',
+                                date
+                              })}
+                              className={cn(
+                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center",
+                                !isOrd ? "cursor-pointer hover:bg-slate-200" : "bg-slate-800",
+                                !escala && !isOrd ? "bg-slate-100/80" : ""
+                              )}
+                              style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
+                            >
+                               <div className="w-full h-full flex items-center justify-center font-black text-[9px] uppercase tracking-tighter">
+                                  {escala ? (
+                                    <motion.span 
+                                      initial={{ scale: 0.8 }} 
+                                      animate={{ scale: 1 }}
+                                      className="text-white drop-shadow-sm px-1 truncate"
+                                    >
+                                      {escala.service?.sigla || 'ESC'}
+                                    </motion.span>
+                                  ) : isOrd ? (
+                                    <span className="text-white/30 text-[7px] font-black">ORD</span>
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center group-matrix-cell">
+                                       <span className="text-[10px] font-bold text-slate-300">0</span>
+                                    </div>
+                                  )}
+                               </div>
+                               
+                               {!isOrd && (
+                                 <div className="absolute inset-x-0 bottom-0 h-0.5 bg-pmpe-navy scale-x-0 group-matrix-cell-hover:scale-x-100 transition-transform origin-center" />
+                               )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Matrix Ledger / Legend Footer */}
+            <div className="bg-slate-50 border-t border-slate-200 p-4 flex flex-wrap gap-6 items-center shrink-0">
+               <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-red-600 rounded shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase">Finais de Semana</span>
+               </div>
+               <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-700 rounded shadow-sm" />
+                  <span className="text-[9px] font-black text-slate-500 uppercase">Dias de Semana</span>
+               </div>
+               <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-slate-100 border border-slate-200 rounded shadow-sm flex items-center justify-center text-[8px] text-slate-300 font-bold">0</div>
+                  <span className="text-[9px] font-black text-slate-500 uppercase">Disponível para Escala</span>
+               </div>
+               <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-slate-800 rounded shadow-sm flex items-center justify-center text-[7px] text-white/40 font-black">ORD</div>
+                  <span className="text-[9px] font-black text-slate-500 uppercase">Serviço Ordinário</span>
+               </div>
+               <div className="ml-auto flex items-center gap-2">
+                  <span className="text-[9px] font-black text-pmpe-navy uppercase opacity-40 italic tracking-widest">Utilize as SIGLAS dos serviços para identificação.</span>
+               </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Right Sidebar: Services Dictionary */}
+        <div className="w-80 flex flex-col gap-6 shrink-0 h-full overflow-hidden">
+           {/* Services List Panel */}
+           <div className="flex-1 bg-white rounded-[32px] border border-slate-200 shadow-xl overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                 <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-pmpe-gold" />
+                    Dicionário de Serviços ({activeTab})
+                 </h3>
+                 <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <input 
+                       type="text"
+                       placeholder="Filtrar Serviços..."
+                       value={serviceSearchTerm}
+                       onChange={(e) => setServiceSearchTerm(e.target.value)}
+                       className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[9px] font-bold outline-none focus:ring-2 focus:ring-pmpe-navy/10 uppercase"
+                    />
+                 </div>
               </div>
-              <div className="relative z-10">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Total {activeTab} Unidade</p>
-                 <div className="flex items-baseline gap-1">
-                    <p className="text-xl font-black text-pmpe-navy font-mono">
-                       {activeTab === 'PJES' ? totalPjesUsed : currentUsage.OPS} 
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-none">
+                 {services
+                   .filter(s => s.tipo === activeTab && (!serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase())))
+                   .map(s => (
+                    <div key={s.id} className="p-3 rounded-2xl border border-slate-50 bg-slate-50/30 hover:bg-white hover:border-slate-200 hover:shadow-md transition-all group cursor-default">
+                       <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] shadow-sm transform group-hover:scale-110 transition-transform" style={{ backgroundColor: s.color, color: 'white' }}>
+                             {s.sigla}
+                          </div>
+                          <div>
+                             <p className="text-[9px] font-black text-pmpe-navy uppercase leading-tight">{s.nome}</p>
+                             <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">COTA: {s.cotasPorServico || 1}</span>
+                                <div className="w-1 h-1 bg-slate-200 rounded-full" />
+                                <span className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">{s.horarioInicio} - {s.horarioTermino}</span>
+                             </div>
+                          </div>
+                       </div>
+                    </div>
+                 ))}
+                 {services.filter(s => s.tipo === activeTab).length === 0 && (
+                    <div className="p-8 text-center">
+                       <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <AlertCircle className="w-6 h-6 text-slate-300" />
+                       </div>
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">
+                          Nenhum serviço de {activeTab} cadastrado para este mês.
+                       </p>
+                    </div>
+                 )}
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100">
+                 <div className="flex items-center gap-2 px-3 py-2 bg-pmpe-navy/5 rounded-xl">
+                    <Zap className="w-3 h-3 text-pmpe-gold animate-pulse" />
+                    <p className="text-[7px] font-bold text-pmpe-navy uppercase leading-tight italic">
+                       Clique no "0" na matriz para lançar estes serviços.
                     </p>
-                    <p className="text-[10px] font-bold text-slate-300"> / {activeTab === 'PJES' ? totalPjesLimit : unitQuotas?.opsTotal}</p>
                  </div>
               </div>
            </div>
-
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-pmpe-gold/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
-              <div className="p-3 bg-pmpe-gold/20 rounded-2xl text-amber-600 border border-amber-200 relative z-10 shadow-lg shadow-pmpe-gold/20">
-                 <Target className="w-5 h-5" />
-              </div>
-              <div className="relative z-10">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Saldo Disponível</p>
-                 <p className="text-xl font-black text-emerald-600 font-mono">
-                    {activeTab === 'PJES' ? (totalPjesLimit - totalPjesUsed) : ((unitQuotas?.opsTotal || 0) - currentUsage.OPS)}
-                 </p>
-              </div>
-           </div>
-        </div>
-
-        {/* Operational Matrix Board */}
-        <div className="flex-1 bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col relative">
-          
-          <div className="flex-1 overflow-auto custom-matrix-scroll p-1">
-            <table className="w-full border-separate border-spacing-0 text-[10px] font-sans">
-              <thead className="sticky top-0 z-[20]">
-                <tr className="bg-pmpe-navy text-white h-14">
-                  {/* Fixed Columns Headers */}
-                  <th className="sticky left-0 z-30 p-2 min-w-[48px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black">GRA.</th>
-                  <th className="sticky left-[48px] z-30 p-2 min-w-[70px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">MAT.</th>
-                  <th className="sticky left-[118px] z-30 p-4 min-w-[150px] bg-pmpe-navy text-left font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">EFETIVO</th>
-                  
-                  {/* Stats Columns Headers */}
-                  <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">SOLIC.</th>
-                  <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">DISP.</th>
-                  <th className="p-2 min-w-[48px] bg-emerald-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">ESCAL.</th>
-                  <th className="p-2 min-w-[48px] bg-rose-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">A ESC.</th>
-                  
-                  {/* Days Multi-Column (Matrix) */}
-                  {days.map(day => {
-                    const isWknd = isWeekend(day);
-                    return (
-                      <th 
-                        key={day.toISOString()} 
-                        className={cn(
-                          "min-w-[42px] p-1 border-b-2 border-black border-l-2 border-black text-center transition-colors",
-                          isWknd ? "bg-red-600" : "bg-blue-700 hover:bg-blue-800"
-                        )}
-                      >
-                         <div className="flex flex-col items-center">
-                            <span className="text-[6px] font-black opacity-60 mb-0.5 leading-none uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
-                            <span className="text-[11px] font-black leading-none">{format(day, 'dd')}</span>
-                         </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                   <tr>
-                     <td colSpan={days.length + 7} className="p-32 text-center">
-                        <div className="flex flex-col items-center gap-6">
-                           <div className="w-16 h-16 border-4 border-pmpe-navy/10 border-t-pmpe-navy rounded-full animate-spin" />
-                           <p className="text-sm font-black text-pmpe-navy uppercase tracking-[0.2em] animate-pulse">Processando Matriz Operacional...</p>
-                        </div>
-                     </td>
-                   </tr>
-                ) : filteredVolunteers.map(v => {
-                  const scaledPMRecords = allEscalasOfMonth.filter(e => e.policemenIds.includes(v.policemanId));
-                  const scaledCount = scaledPMRecords.length;
-                  const solicted = v.cotas || 0;
-                  const remaining = solicted - scaledCount;
-
-                  return (
-                    <tr key={v.id} className="h-10 hover:bg-slate-50 transition-colors group">
-                      {/* Fixed ID Info */}
-                      <td className="sticky left-0 z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-black text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
-                      <td className="sticky left-[48px] z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.matricula}</td>
-                      <td className="sticky left-[118px] z-10 p-2 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-4 border-r-2 border-b-2 border-black truncate">
-                         {v.policeman?.nomeGuerra}
-                      </td>
-
-                      {/* Stats Dynamic Columns */}
-                      <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r-2 border-b-2 border-black">{solicted}</td>
-                      <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r-2 border-b-2 border-black">{days.length - (ordinarySchedules[v.policemanId]?.length || 0)}</td>
-                      <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r-2 border-b-2 border-black">{scaledCount}</td>
-                      <td className={cn(
-                        "text-center font-black border-r-2 border-b-2 border-black",
-                        remaining > 0 ? "bg-rose-50/50 text-rose-600" : "bg-emerald-50 text-emerald-500"
-                      )}>{remaining}</td>
-
-                      {/* Matrix cells for each day */}
-                      {days.map(date => {
-                        const dayNum = getDate(date);
-                        const isOrd = (ordinarySchedules[v.policemanId] || []).includes(dayNum);
-                        const escala = scaledPMRecords.find(e => isSameDay(e.date.toDate(), date));
-                        
-                        return (
-                          <td 
-                            key={date.toISOString()}
-                            onClick={() => !isOrd && setAssignmentModal({ 
-                              policemanId: v.policemanId, 
-                              policemanName: v.policeman?.nomeGuerra || 'PM',
-                              policemanMat: v.policeman?.matricula || '',
-                              date
-                            })}
-                            className={cn(
-                              "relative p-0 border-r-2 border-b-2 border-black transition-all text-center",
-                              !isOrd ? "cursor-pointer hover:bg-slate-200" : "bg-slate-800",
-                              !escala && !isOrd ? "bg-slate-100/80" : ""
-                            )}
-                            style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
-                          >
-                             <div className="w-full h-full flex items-center justify-center font-black text-[9px] uppercase tracking-tighter">
-                                {escala ? (
-                                  <motion.span 
-                                    initial={{ scale: 0.8 }} 
-                                    animate={{ scale: 1 }}
-                                    className="text-white drop-shadow-sm px-1 truncate"
-                                  >
-                                    {escala.service?.sigla || 'ESC'}
-                                  </motion.span>
-                                ) : isOrd ? (
-                                  <span className="text-white/30 text-[7px] font-black">ORD</span>
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center group-matrix-cell">
-                                     <span className="text-[10px] font-bold text-slate-300">0</span>
-                                  </div>
-                                )}
-                             </div>
-                             
-                             {!isOrd && (
-                               <div className="absolute inset-x-0 bottom-0 h-0.5 bg-pmpe-navy scale-x-0 group-matrix-cell-hover:scale-x-100 transition-transform origin-center" />
-                             )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Matrix Ledger / Legend Footer */}
-          <div className="bg-slate-50 border-t border-slate-200 p-4 flex flex-wrap gap-6 items-center shrink-0">
-             <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-red-600 rounded shadow-sm" />
-                <span className="text-[9px] font-black text-slate-500 uppercase">Finais de Semana</span>
-             </div>
-             <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-blue-700 rounded shadow-sm" />
-                <span className="text-[9px] font-black text-slate-500 uppercase">Dias de Semana</span>
-             </div>
-             <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-slate-100 border border-slate-200 rounded shadow-sm flex items-center justify-center text-[8px] text-slate-300 font-bold">0</div>
-                <span className="text-[9px] font-black text-slate-500 uppercase">Disponível para Escala</span>
-             </div>
-             <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-slate-800 rounded shadow-sm flex items-center justify-center text-[7px] text-white/40 font-black">ORD</div>
-                <span className="text-[9px] font-black text-slate-500 uppercase">Serviço Ordinário</span>
-             </div>
-             <div className="ml-auto flex items-center gap-2">
-                <span className="text-[9px] font-black text-pmpe-navy uppercase opacity-40 italic tracking-widest">Utilize as SIGLAS dos serviços para identificação.</span>
-             </div>
-          </div>
-
         </div>
       </div>
 
