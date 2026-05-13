@@ -306,8 +306,8 @@ const CreateEscala = () => {
       setTimeout(() => setSuccess(false), 2000);
       // No need for fetchData() as onSnapshot handles it
     } catch (err) {
-      console.error("Scale assignment error:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'escalas/quotaLogs');
+      console.error(err);
+      alert('Erro ao salvar escala. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
