@@ -20,10 +20,11 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      // Fixed admin email as requested, plus checking users collection for dynamic admins
       return isSignedIn() && (
-        request.auth.token.email == 'elwyn.gomes94@gmail.com' || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true)
+        currentEmail() == 'elwyn.gomes94@gmail.com' || 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
       );
     }
 
@@ -67,7 +68,7 @@ service cloud.firestore {
     function isValidEscala(d) {
       return d.serviceTypeId is string &&
              d.policemenIds is list && d.policemenIds.size() > 0 &&
-             (d.date is timestamp || d.date is string);
+             d.date is timestamp;
     }
 
     // Rules
@@ -116,7 +117,7 @@ service cloud.firestore {
 
     match /quotaLogs/{logId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidQuotaLog(incoming());
+      allow create: if isSignedIn() && isValidId(logId) && isValidQuotaLog(incoming());
       allow update, delete: if isAdmin();
     }
   }

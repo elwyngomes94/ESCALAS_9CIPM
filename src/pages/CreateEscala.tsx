@@ -156,10 +156,15 @@ const CreateEscala = () => {
         where('date', '<=', Timestamp.fromDate(end))
       ),
       (snap) => {
-        const eData = snap.docs.map(d => ({
+        const eData = snap.docs.map(d => {
+          const data = d.data() as Escala;
+          return {
             id: d.id,
-            ...d.data()
-        } as Escala));
+            ...data,
+            // services state is updated by static fetch above
+            service: services.find(s => s.id === data.serviceTypeId)
+          };
+        });
         setAllEscalasOfMonth(eData);
         setLoading(false);
       }
@@ -194,35 +199,26 @@ const CreateEscala = () => {
       unsubEscalas();
       unsubLogs();
     };
-  }, [currentMonth, mKey]); // Removed services dependency, as we map them dynamically now
+  }, [currentMonth, mKey, services.length]); // Added services.length to re-run map in snap if services arrive
 
-  const escalasWithServices = useMemo(() => {
-    return allEscalasOfMonth.map(e => ({
-      ...e,
-      service: services.find(s => s.id === e.serviceTypeId)
-    }));
-  }, [allEscalasOfMonth, services]);
 
   const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }) => {
-    if (submitting) return; 
+    if (submitting) return; // Prevent double clicks
     
     const assignInfo = customAssignInfo || assignmentModal;
     if (!assignInfo || !isAdmin) return;
     
     const { policemanId, date } = assignInfo;
     const service = services.find(s => s.id === serviceId);
-    if (!service) {
-      console.warn("Service not found for ID:", serviceId);
-      return;
-    }
+    if (!service) return;
 
     const dateStr = format(date, 'yyyy-MM-dd');
     const needed = service.cotasPorServico || 1;
     
-    // 1. Strict Duplication Check
-    const typeBeingAssigned = service.tipo;
-    const alreadyScaledInSameType = escalasWithServices.find(e => 
-      format(e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date), 'yyyy-MM-dd') === dateStr && 
+    // 1. Strict Duplication Check (Check ALL scales for this person on this day)
+    const typeBeingAssigned = service.tipo; // 'PJES' or 'OPS'
+    const alreadyScaledInSameType = allEscalasOfMonth.find(e => 
+      format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
       e.policemenIds.includes(policemanId) &&
       e.service?.tipo === typeBeingAssigned
     );
@@ -364,13 +360,13 @@ const CreateEscala = () => {
     // We want unique policemanId per row
     const pIds = new Set<string>();
     volunteers.forEach(v => pIds.add(v.policemanId));
-    escalasWithServices.forEach(e => e.policemenIds.forEach(id => pIds.add(id)));
+    allEscalasOfMonth.forEach(e => e.policemenIds.forEach(id => pIds.add(id)));
 
     const result: (Volunteer & { policeman?: Policeman })[] = [];
 
     pIds.forEach(pid => {
       const pVolunteers = volunteers.filter(v => v.policemanId === pid);
-      const hasAnyScale = escalasWithServices.some(e => e.policemenIds.includes(pid));
+      const hasAnyScale = allEscalasOfMonth.some(e => e.policemenIds.includes(pid));
       
       // Filter logic: person belongs to this tab if:
       // a) They volunteered for this tab's type
@@ -527,7 +523,7 @@ const CreateEscala = () => {
                 <div className="relative z-10">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Escalados {activeTab}</p>
                    <p className="text-xl font-black text-pmpe-navy">
-                      {escalasWithServices.filter(e => e.service?.tipo === activeTab).length}
+                      {allEscalasOfMonth.filter(e => e.service?.tipo === activeTab).length}
                    </p>
                 </div>
              </div>
@@ -644,7 +640,7 @@ const CreateEscala = () => {
                           const dateStr = format(date, 'yyyy-MM-dd');
 
                           // Vacancy check for the selected service on this specific date
-                          const escalaToday = escalasWithServices.find(e => e.serviceTypeId === selectedServiceId && format(e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date), 'yyyy-MM-dd') === dateStr);
+                          const escalaToday = allEscalasOfMonth.find(e => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
                           const slotsUsed = escalaToday?.policemenIds.length || 0;
                           const slotsMax = currentSelectedService?.vagasNecessarias || 0;
                           const isFull = slotsMax > 0 && slotsUsed >= slotsMax;
@@ -697,7 +693,7 @@ const CreateEscala = () => {
                                   }
 
                                   // Vacancy Check for drop
-                                  const scaleToday = escalasWithServices.find(e => e.serviceTypeId === draggedServiceId && format(e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date), 'yyyy-MM-dd') === dStr);
+                                  const scaleToday = allEscalasOfMonth.find(e => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
                                   const used = scaleToday?.policemenIds.length || 0;
                                   const max = ds.vagasNecessarias || 0;
                                   if (max > 0 && used >= max) {
@@ -963,8 +959,8 @@ const CreateEscala = () => {
                     </div>
                  </div>
               </div>
-            </div>
-         </div>
+           </div>
+        </div>
       </div>
 
       {/* Advanced Selection Modal */}
@@ -978,7 +974,6 @@ const CreateEscala = () => {
               className="bg-white rounded-[48px] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20"
             >
                <div className="p-10 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-                  {/* ... Header remains the same ... */}
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-pmpe-navy rounded-[24px] flex items-center justify-center shadow-2xl shadow-pmpe-navy/30 relative">
                        <Users className="w-8 h-8 text-pmpe-gold" />
@@ -1004,8 +999,8 @@ const CreateEscala = () => {
                   
                   {/* Active Scale Info */}
                   {(() => {
-                    const scaled = escalasWithServices.filter(e => 
-                      isSameDay(e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId)
+                    const scaled = allEscalasOfMonth.filter(e => 
+                      isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId)
                     );
                     if (scaled.length > 0) {
                       return (
@@ -1067,7 +1062,7 @@ const CreateEscala = () => {
                         {services.filter(s => {
                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
                            const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
-                           const isAlreadyIn = escalasWithServices.some(e => e.serviceTypeId === s.id && isSameDay(e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
+                           const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
                            const isCorrectType = s.tipo?.toUpperCase() === activeTab;
                            const matchesMonth = s.month === mKey;
                            const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
@@ -1086,14 +1081,14 @@ const CreateEscala = () => {
                         {services.filter(s => {
                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
                            const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
-                           const isAlreadyIn = escalasWithServices.some(e => e.serviceTypeId === s.id && isSameDay(e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
+                           const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
                            const isCorrectType = s.tipo?.toUpperCase() === activeTab;
                            const matchesMonth = s.month === mKey;
                            const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
                            
                            return isActiveDay && !isAlreadyIn && isCorrectType && matchesMonth && matchesSearch;
                         }).map(s => {
-                           const escToday = escalasWithServices.find(e => e.serviceTypeId === s.id && isSameDay(e.date instanceof Timestamp ? e.date.toDate() : new Date(e.date), assignmentModal.date));
+                           const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date));
                            const pToday = escToday?.policemenIds.length || 0;
                            const target = s.vagasNecessarias || 0;
                            const isFull = target > 0 && pToday >= target;
