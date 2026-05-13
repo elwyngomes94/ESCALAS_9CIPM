@@ -4,6 +4,7 @@ import {
   getDocs, 
   addDoc, 
   doc,
+  onSnapshot,
   query, 
   where,
   serverTimestamp,
@@ -87,108 +88,123 @@ const CreateEscala = () => {
   const [serviceSearchTerm, setServiceSearchTerm] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
 
-  const fetchData = async () => {
-    setLoading(true);
+  useEffect(() => {
+    // 1. Initial Static Data (Services, Policemen, Quotas)
+    const loadStaticData = async () => {
+      try {
+        const [sSnap, polySnap, settingsSnap, ordSnap] = await Promise.all([
+          getDocs(query(collection(db, 'serviceTypes'))),
+          getDocs(collection(db, 'policemen')),
+          getDocs(query(collection(db, 'quotaSettings'), where('month', '==', mKey))),
+          getDocs(query(collection(db, 'ordinarySchedules'), where('month', '==', mKey)))
+        ]);
+
+        const sData = sSnap.docs.map(d => ({
+          id: d.id,
+          ...d.data(),
+          activationType: d.data().activationType || 'ALL',
+          activeDates: d.data().activeDates || [],
+          month: d.data().month || mKey,
+          cotasPorServico: d.data().cotasPorServico ?? d.data().cotasPorEscala ?? 1
+        } as ServiceType));
+        setServices(sData);
+
+        const polyData = polySnap.docs.reduce((acc, d) => {
+          acc[d.id] = { id: d.id, ...d.data() } as Policeman;
+          return acc;
+        }, {} as Record<string, Policeman>);
+        setPolicemen(polyData);
+
+        let qSettings: QuotaSettings = { month: mKey, pjesMPTotal: 0, pjesForumTotal: 0, pjesEscolarTotal: 0, pjesDecretoTotal: 0, opsTotal: 0 };
+        if (!settingsSnap.empty) {
+          qSettings = { id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() } as QuotaSettings;
+        }
+        setUnitQuotas(qSettings);
+
+        const oMap: Record<string, number[]> = {};
+        ordSnap.docs.forEach(d => {
+          const data = d.data() as OrdinarySchedule;
+          oMap[data.policemanId] = data.days || [];
+        });
+        setOrdinarySchedules(oMap);
+      } catch (err) {
+        console.error("Error loading static data:", err);
+      }
+    };
+
+    loadStaticData();
+
+    // 2. Real-time Listeners (Volunteers, Escalas, QuotaLogs)
     const start = startOfMonth(currentMonth);
     const end = endOfMonth(currentMonth);
 
-    try {
-      const [sSnap, vSnap, polySnap, eSnap, ordSnap, settingsSnap, logsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'serviceTypes'))),
-        getDocs(query(collection(db, 'volunteers'), where('month', '==', mKey))),
-        getDocs(collection(db, 'policemen')),
-        getDocs(query(
-          collection(db, 'escalas'), 
-          where('date', '>=', Timestamp.fromDate(start)),
-          where('date', '<=', Timestamp.fromDate(end))
-        )),
-        getDocs(query(collection(db, 'ordinarySchedules'), where('month', '==', mKey))),
-        getDocs(query(collection(db, 'quotaSettings'), where('month', '==', mKey))),
-        getDocs(query(collection(db, 'quotaLogs'), where('month', '==', mKey)))
-      ]);
-
-      const sData = sSnap.docs.map(d => {
-        const data = d.data();
-        return { 
+    const unsubVolunteers = onSnapshot(
+      query(collection(db, 'volunteers'), where('month', '==', mKey)),
+      (snap) => {
+        setVolunteers(snap.docs.map(d => ({ 
           id: d.id, 
-          ...data,
-          activationType: data.activationType || 'ALL',
-          activeDates: data.activeDates || [],
-          month: data.month || mKey,
-          cotasPorServico: data.cotasPorServico ?? data.cotasPorEscala ?? 1
-        } as ServiceType;
-      });
-      setServices(sData);
-
-      const polyData = polySnap.docs.reduce((acc, d) => {
-        acc[d.id] = { id: d.id, ...d.data() } as Policeman;
-        return acc;
-      }, {} as Record<string, Policeman>);
-      setPolicemen(polyData);
-
-      const vData = vSnap.docs.map(vDoc => {
-        const v = { id: vDoc.id, ...vDoc.data() } as Volunteer;
-        return { ...v, policeman: polyData[v.policemanId] };
-      });
-      setVolunteers(vData);
-
-      const eData = eSnap.docs.map(d => {
-        const data = d.data() as Escala;
-        return { 
-          id: d.id, 
-          ...data,
-          service: sData.find(s => s.id === data.serviceTypeId)
-        };
-      });
-      setAllEscalasOfMonth(eData);
-
-      const oMap: Record<string, number[]> = {};
-      ordSnap.docs.forEach(d => {
-        const data = d.data() as OrdinarySchedule;
-        oMap[data.policemanId] = data.days || [];
-      });
-      setOrdinarySchedules(oMap);
-
-      let qSettings: QuotaSettings = { month: mKey, pjesMPTotal: 0, pjesForumTotal: 0, pjesEscolarTotal: 0, pjesDecretoTotal: 0, opsTotal: 0 };
-      if (!settingsSnap.empty) {
-        qSettings = { id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() } as QuotaSettings;
+          ...d.data(),
+          policeman: policemen[d.data().policemanId] // Note: policemen might be empty on first run, but filteredVolunteers uses it via useMemo anyway
+        } as Volunteer)));
       }
-      setUnitQuotas(qSettings);
+    );
 
-      let usage = { PJES_MP: 0, PJES_FORUM: 0, PJES_ESCOLAR: 0, PJES_DECRETO: 0, OPS: 0 };
-      const serviceUsage: Record<string, number> = {};
+    const unsubEscalas = onSnapshot(
+      query(
+        collection(db, 'escalas'),
+        where('date', '>=', Timestamp.fromDate(start)),
+        where('date', '<=', Timestamp.fromDate(end))
+      ),
+      (snap) => {
+        const eData = snap.docs.map(d => {
+          const data = d.data() as Escala;
+          return {
+            id: d.id,
+            ...data,
+            // services state is updated by static fetch above
+            service: services.find(s => s.id === data.serviceTypeId)
+          };
+        });
+        setAllEscalasOfMonth(eData);
+        setLoading(false);
+      }
+    );
 
-      logsSnap.docs.forEach(d => {
-        const log = d.data() as QuotaLog;
-        
-        // Track per service type
-        if (log.serviceTypeId) {
-           serviceUsage[log.serviceTypeId] = (serviceUsage[log.serviceTypeId] || 0) + log.quantidade;
-        }
+    const unsubLogs = onSnapshot(
+      query(collection(db, 'quotaLogs'), where('month', '==', mKey)),
+      (snap) => {
+        let usage = { PJES_MP: 0, PJES_FORUM: 0, PJES_ESCOLAR: 0, PJES_DECRETO: 0, OPS: 0 };
+        const serviceUsage: Record<string, number> = {};
 
-        if (log.tipo === 'OPS') usage.OPS += log.quantidade;
-        else if (log.tipo === 'PJES') {
-          if (log.pjesSubtype === 'MP') usage.PJES_MP += log.quantidade;
-          else if (log.pjesSubtype === 'FORUM') usage.PJES_FORUM += log.quantidade;
-          else if (log.pjesSubtype === 'ESCOLAR') usage.PJES_ESCOLAR += log.quantidade;
-          else if (log.pjesSubtype === 'DECRETO') usage.PJES_DECRETO += log.quantidade;
-        }
-      });
-      setCurrentUsage(usage);
-      setServiceSpecificUsage(serviceUsage);
+        snap.docs.forEach(d => {
+          const log = d.data() as QuotaLog;
+          if (log.serviceTypeId) {
+            serviceUsage[log.serviceTypeId] = (serviceUsage[log.serviceTypeId] || 0) + log.quantidade;
+          }
+          if (log.tipo === 'OPS') usage.OPS += log.quantidade;
+          else if (log.tipo === 'PJES') {
+            if (log.pjesSubtype === 'MP') usage.PJES_MP += log.quantidade;
+            else if (log.pjesSubtype === 'FORUM') usage.PJES_FORUM += log.quantidade;
+            else if (log.pjesSubtype === 'ESCOLAR') usage.PJES_ESCOLAR += log.quantidade;
+            else if (log.pjesSubtype === 'DECRETO') usage.PJES_DECRETO += log.quantidade;
+          }
+        });
+        setCurrentUsage(usage);
+        setServiceSpecificUsage(serviceUsage);
+      }
+    );
 
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      unsubVolunteers();
+      unsubEscalas();
+      unsubLogs();
+    };
+  }, [currentMonth, mKey, services.length]); // Added services.length to re-run map in snap if services arrive
 
-  useEffect(() => {
-    fetchData();
-  }, [currentMonth]);
 
   const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }) => {
+    if (submitting) return; // Prevent double clicks
+    
     const assignInfo = customAssignInfo || assignmentModal;
     if (!assignInfo || !isAdmin) return;
     
@@ -197,23 +213,28 @@ const CreateEscala = () => {
     if (!service) return;
 
     const dateStr = format(date, 'yyyy-MM-dd');
-    const existingEscala = allEscalasOfMonth.find(e => 
-      e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
-    );
     
-    // Check if PM is already in THIS service on this day
-    if (existingEscala?.policemenIds.includes(policemanId)) {
-       if (customAssignInfo) {
-          alert('Este policial já está escalado neste serviço para este dia.');
-       }
+    // 1. Strict Duplication Check (Check ALL scales for this person on this day)
+    const alreadyScaledToday = allEscalasOfMonth.filter(e => 
+      format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && e.policemenIds.includes(policemanId)
+    );
+
+    if (alreadyScaledToday.length > 0) {
+       // Allow scaling if it's a DIFFERENT service? 
+       // Usually no, unless explicitly allowed.
+       // The user said "Impedir escala duplicada".
+       alert(`Este policial já possui uma escala para este dia (${alreadyScaledToday[0].service?.sigla}).`);
        return;
     }
 
+    const existingEscala = allEscalasOfMonth.find(e => 
+      e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
+    );
+
     const needed = service.cotasPorServico || 1;
-    
     const type = service.tipo as 'PJES' | 'OPS';
     
-    // 1. Check Service SPECIFIC Limit (PRIORITY as per user request)
+    // 2. Quota Checks
     if (service.quotaMensalLimit && service.quotaMensalLimit > 0) {
         const usedByThisService = serviceSpecificUsage[serviceId] || 0;
         if (usedByThisService + needed > service.quotaMensalLimit) {
@@ -222,10 +243,8 @@ const CreateEscala = () => {
         }
     }
 
-    // 2. Check Unit Global Limit (fallback/secondary)
     let limit = 0;
     let used = 0;
-
     if (type === 'OPS') { limit = unitQuotas?.opsTotal || 0; used = currentUsage.OPS; }
     else {
       const subtype = service.pjesSubtype;
@@ -235,7 +254,6 @@ const CreateEscala = () => {
       else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
     }
 
-    // Only alert global limit if it's actually set (greater than 0)
     if (limit > 0 && used + needed > limit) {
       alert(`Erro: Cota da UNIDADE insuficiente para ${service.sigla}.`);
       return;
@@ -245,10 +263,13 @@ const CreateEscala = () => {
     try {
       let finalEscalaId = '';
       if (existingEscala) {
-        await updateDoc(doc(db, 'escalas', existingEscala.id!), {
-          policemenIds: [...new Set([...existingEscala.policemenIds, policemanId])],
-          updatedAt: serverTimestamp()
-        });
+        // Double check policemenIds to prevent race condition
+        if (!existingEscala.policemenIds.includes(policemanId)) {
+          await updateDoc(doc(db, 'escalas', existingEscala.id!), {
+            policemenIds: [...new Set([...existingEscala.policemenIds, policemanId])],
+            updatedAt: serverTimestamp()
+          });
+        }
         finalEscalaId = existingEscala.id!;
       } else {
         const docRef = await addDoc(collection(db, 'escalas'), {
@@ -261,7 +282,6 @@ const CreateEscala = () => {
         finalEscalaId = docRef.id;
       }
       
-      // ALWAYS create a quota log for every person added
       await addDoc(collection(db, 'quotaLogs'), {
         serviceTypeId: serviceId,
         serviceName: service.nome,
@@ -271,7 +291,7 @@ const CreateEscala = () => {
         quantidade: needed,
         usuarioUid: auth.currentUser?.uid,
         usuarioEmail: auth.currentUser?.email,
-        policemanId: policemanId, // Also track WHO used the quota
+        policemanId: policemanId,
         data: serverTimestamp(),
         month: format(date, 'yyyy-MM')
       });
@@ -281,9 +301,10 @@ const CreateEscala = () => {
       }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
-      fetchData();
+      // No need for fetchData() as onSnapshot handles it
     } catch (err) {
       console.error(err);
+      alert('Erro ao salvar escala. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -318,7 +339,6 @@ const CreateEscala = () => {
         await deleteDoc(logDoc.ref);
       }
       
-      fetchData();
       setAssignmentModal(null);
     } catch (err) {
       console.error(err);
@@ -620,6 +640,9 @@ const CreateEscala = () => {
                              (currentSelectedService.activeDates || []).includes(dateStr)
                           ) : false;
                           
+                          const isCurrentlyTarget = assignmentModal?.policemanId === v.policemanId && isSameDay(assignmentModal.date, date);
+                          const isSubmittingThisCell = submitting && isCurrentlyTarget;
+                          
                           return (
                             <td 
                               key={date.toISOString()}
@@ -633,7 +656,7 @@ const CreateEscala = () => {
                                 e.currentTarget.classList.remove('bg-emerald-100');
                               }}
                               onDrop={(e) => {
-                                if (isOrd || escala) return;
+                                if (isOrd || escala || submitting) return;
                                 e.preventDefault();
                                 e.currentTarget.classList.remove('bg-emerald-100');
                                 const draggedServiceId = e.dataTransfer.getData('serviceId');
@@ -655,7 +678,7 @@ const CreateEscala = () => {
                                 }
                               }}
                               onClick={() => {
-                                if (isOrd) return;
+                                if (isOrd || submitting) return;
                                 if (selectedServiceId) {
                                   if (!isServiceActiveOnThisDay) {
                                     alert('Este serviço não está configurado para estar ativo nesta data.');
@@ -675,18 +698,21 @@ const CreateEscala = () => {
                                 }
                               }}
                               className={cn(
-                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center",
-                                !isOrd ? "cursor-pointer hover:bg-slate-200" : "bg-slate-800",
-                                !escala && !isOrd ? "bg-slate-100/80" : "",
-                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !escala ? "hover:scale-[1.05] hover:shadow-2xl z-20 bg-emerald-50/50" : ""
+                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-10 w-10",
+                                !isOrd ? "cursor-pointer" : "bg-slate-800",
+                                !escala && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
+                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !escala ? "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10" : "",
+                                isSubmittingThisCell ? "bg-amber-100" : ""
                               )}
                               style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
                             >
                                <div className="w-full h-full flex items-center justify-center font-black text-[9px] uppercase tracking-tighter">
-                                  {escala ? (
+                                  {isSubmittingThisCell ? (
+                                    <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                  ) : escala ? (
                                     <motion.span 
-                                      initial={{ scale: 0.8 }} 
-                                      animate={{ scale: 1 }}
+                                      initial={{ scale: 0.8, opacity: 0 }} 
+                                      animate={{ scale: 1, opacity: 1 }}
                                       className="text-white drop-shadow-sm px-1 truncate"
                                     >
                                       {escala.service?.sigla || 'ESC'}
@@ -814,11 +840,21 @@ const CreateEscala = () => {
                           >
                              {s.sigla}
                           </div>
-                          <div>
-                             <p className={cn(
-                                "text-[9px] font-black uppercase leading-tight",
-                                selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
-                             )}>{s.nome}</p>
+                          <div className="flex-1 min-w-0">
+                             <div className="flex items-center justify-between gap-2 overflow-hidden">
+                                <p className={cn(
+                                   "text-[9px] font-black uppercase leading-tight truncate",
+                                   selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
+                                )}>{s.nome}</p>
+                                {s.quotaMensalLimit ? (
+                                   <span className={cn(
+                                      "text-[7px] font-black px-1.5 py-0.5 rounded shrink-0",
+                                      selectedServiceId === s.id ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                   )}>
+                                      {(s.quotaMensalLimit || 0) - (serviceSpecificUsage[s.id!] || 0)} DISP.
+                                   </span>
+                                ) : null}
+                             </div>
                              <div className="flex items-center gap-2 mt-1">
                                 <span className={cn(
                                    "text-[7px] font-bold uppercase tracking-tighter",
