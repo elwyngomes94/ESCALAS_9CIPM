@@ -56,8 +56,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
+  const isAdmin = profile?.isAdmin || user?.email === 'elwyn.gomes94@gmail.com';
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin: profile?.isAdmin || user?.email === 'elwyn.gomes94@gmail.com' }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );
