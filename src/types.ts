@@ -27,15 +27,18 @@ export interface ServiceType {
   id?: string;
   nome: string;
   tipo: 'PJES' | 'OPS' | 'ORDINARIO' | 'EXTRA';
-  categoria: string; // Patrulha, GGI, Guarda, Operação, Apoio, Supervisão, Tático, etc.
+  categoria: string; // Patrulha, GGI, Guarda, Operaçãao, Apoio, Supervisão, Tático, etc.
   sigla: string;
   color: string;
+  month: string; // YYYY-MM
+  activeDates: string[]; // ['2026-05-05', '2026-05-06', ...]
   iconName?: string;
   cidade: string;
   horarioInicio: string;
   horarioTermino: string;
   diasOperacao?: number[];
   observacoes?: string;
+  vagasNecessarias?: number;
   createdAt?: any;
 }
 

@@ -24,9 +24,13 @@ import {
   Briefcase,
   MapPin,
   Clock,
-  Info
+  Info,
+  Calendar as CalendarIcon,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, parseISO, getDate } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const ServiceTypes = () => {
   const { isAdmin } = useAuth();
@@ -43,7 +47,13 @@ const ServiceTypes = () => {
     horarioInicio: '',
     horarioTermino: '',
     diasOperacao: [],
-    observacoes: ''
+    activeDates: [],
+    month: format(new Date(), 'yyyy-MM'),
+    observacoes: '',
+    color: '#003366',
+    categoria: 'PATRULHA',
+    sigla: 'PTR',
+    vagasNecessarias: 2
   });
 
   const fetchData = async () => {
@@ -51,7 +61,15 @@ const ServiceTypes = () => {
     try {
       const q = query(collection(db, 'serviceTypes'), orderBy('nome'));
       const snap = await getDocs(q);
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceType));
+      const data = snap.docs.map(doc => {
+        const d = doc.data();
+        return { 
+          id: doc.id, 
+          ...d,
+          activeDates: d.activeDates || [],
+          month: d.month || format(new Date(), 'yyyy-MM')
+        } as ServiceType;
+      });
       setServices(data);
     } catch (err) {
       handleFirestoreError(err, OperationType.LIST, 'serviceTypes');
@@ -70,13 +88,13 @@ const ServiceTypes = () => {
       if (editingId) {
         await updateDoc(doc(db, 'serviceTypes', editingId), {
           ...formData,
-          diasOperacao: formData.diasOperacao || [],
+          activeDates: formData.activeDates || [],
           updatedAt: serverTimestamp()
         });
       } else {
         await addDoc(collection(db, 'serviceTypes'), {
           ...formData,
-          diasOperacao: formData.diasOperacao || [],
+          activeDates: formData.activeDates || [],
           createdAt: serverTimestamp()
         });
       }
@@ -89,7 +107,13 @@ const ServiceTypes = () => {
         horarioInicio: '',
         horarioTermino: '',
         diasOperacao: [],
-        observacoes: ''
+        activeDates: [],
+        month: format(new Date(), 'yyyy-MM'),
+        observacoes: '',
+        color: '#003366',
+        categoria: 'PATRULHA',
+        sigla: 'PTR',
+        vagasNecessarias: 2
       });
       fetchData();
     } catch (err) {
@@ -118,7 +142,13 @@ const ServiceTypes = () => {
         horarioInicio: s.horarioInicio,
         horarioTermino: s.horarioTermino,
         diasOperacao: s.diasOperacao || [],
-        observacoes: s.observacoes || ''
+        activeDates: s.activeDates || [],
+        month: s.month || format(new Date(), 'yyyy-MM'),
+        observacoes: s.observacoes || '',
+        color: s.color || '#003366',
+        categoria: s.categoria || 'PATRULHA',
+        sigla: s.sigla || 'PTR',
+        vagasNecessarias: s.vagasNecessarias || 2
       });
     } else {
       setEditingId(null);
@@ -129,18 +159,24 @@ const ServiceTypes = () => {
         horarioInicio: '',
         horarioTermino: '',
         diasOperacao: [],
-        observacoes: ''
+        activeDates: [],
+        month: format(new Date(), 'yyyy-MM'),
+        observacoes: '',
+        color: '#003366',
+        categoria: 'PATRULHA',
+        sigla: 'PTR',
+        vagasNecessarias: 2
       });
     }
     setIsModalOpen(true);
   };
 
-  const toggleDay = (day: number) => {
-    const current = formData.diasOperacao || [];
-    if (current.includes(day)) {
-      setFormData({ ...formData, diasOperacao: current.filter(d => d !== day) });
+  const toggleActiveDate = (dateStr: string) => {
+    const current = formData.activeDates || [];
+    if (current.includes(dateStr)) {
+      setFormData({ ...formData, activeDates: current.filter(d => d !== dateStr) });
     } else {
-      setFormData({ ...formData, diasOperacao: [...current, day].sort((a, b) => a - b) });
+      setFormData({ ...formData, activeDates: [...current, dateStr].sort() });
     }
   };
 
@@ -321,6 +357,38 @@ const ServiceTypes = () => {
                     />
                   </div>
                   <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Cor no Calendário</label>
+                    <input
+                      type="color"
+                      value={formData.color}
+                      onChange={(e) => setFormData({...formData, color: e.target.value})}
+                      className="w-full h-9 px-1 py-1 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Sigla (Max 4 letras)</label>
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={formData.sigla}
+                      onChange={(e) => setFormData({...formData, sigla: e.target.value.toUpperCase()})}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Categoria de Serviço</label>
+                    <select
+                      required
+                      value={formData.categoria}
+                      onChange={(e) => setFormData({...formData, categoria: e.target.value as any})}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all appearance-none"
+                    >
+                      {['ORDINÁRIO', 'PJES', 'OPS', 'PATRULHA', 'GGI', 'GUARDA', 'OPERAÇÃO', 'EXTRA', 'APOIO', 'SUPERVISÃO', 'TÁTICO'].map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Início</label>
                     <input
                       type="time"
@@ -340,25 +408,75 @@ const ServiceTypes = () => {
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
                     />
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Dias de Operação (Deixe vazio para Diário)</label>
-                    <div className="grid grid-cols-7 gap-1">
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => toggleDay(day)}
-                          className={cn(
-                            "w-full h-8 flex items-center justify-center text-[10px] font-black rounded border transition-all",
-                            formData.diasOperacao?.includes(day)
-                              ? "bg-pmpe-navy text-white border-pmpe-navy"
-                              : "bg-slate-50 text-slate-400 border-slate-200 hover:border-pmpe-navy/30"
-                          )}
-                        >
-                          {day}
-                        </button>
-                      ))}
+                  <div className="col-span-2 grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Mês de Referência</label>
+                      <input
+                        type="month"
+                        required
+                        value={formData.month}
+                        onChange={(e) => setFormData({...formData, month: e.target.value})}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
+                      />
                     </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Vagas Necessárias</label>
+                      <input
+                        type="number"
+                        min={1}
+                        required
+                        value={formData.vagasNecessarias}
+                        onChange={(e) => setFormData({...formData, vagasNecessarias: parseInt(e.target.value)})}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                      Dias Ativos em {format(parseISO(formData.month + '-01'), 'MMMM/yyyy', { locale: ptBR })}
+                    </label>
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="grid grid-cols-7 gap-1">
+                        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
+                           <div key={i} className="text-center text-[9px] font-black text-slate-300 py-1">{d}</div>
+                        ))}
+                        {(() => {
+                           const start = startOfMonth(parseISO(formData.month + '-01'));
+                           const end = endOfMonth(start);
+                           const days = eachDayOfInterval({ start, end });
+                           const firstDayIdx = start.getDay();
+                           
+                           return (
+                             <>
+                               {Array.from({ length: firstDayIdx }).map((_, i) => <div key={`empty-${i}`} />)}
+                               {days.map(date => {
+                                 const dateStr = format(date, 'yyyy-MM-dd');
+                                 const isActive = formData.activeDates?.includes(dateStr);
+                                 return (
+                                   <button
+                                     key={dateStr}
+                                     type="button"
+                                     onClick={() => toggleActiveDate(dateStr)}
+                                     className={cn(
+                                       "h-8 flex flex-col items-center justify-center rounded-lg text-[10px] font-black transition-all border",
+                                       isActive 
+                                         ? "bg-pmpe-navy text-white border-pmpe-navy shadow-md" 
+                                         : "bg-white text-slate-400 border-slate-200 hover:border-pmpe-navy/30"
+                                     )}
+                                   >
+                                     {getDate(date)}
+                                   </button>
+                                 );
+                               })}
+                             </>
+                           );
+                        })()}
+                      </div>
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase tracking-tight italic">
+                       * Clique nos dias para ativar este serviço no calendário de escalas.
+                    </p>
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Observações</label>

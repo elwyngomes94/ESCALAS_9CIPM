@@ -55,6 +55,8 @@ const Volunteers = ({ type }: VolunteersProps) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   
+  const [escalas, setEscalas] = useState<any[]>([]);
+  
   const monthKey = format(currentDate, 'yyyy-MM');
   const monthName = format(currentDate, 'MMMM yyyy', { locale: ptBR });
 
@@ -72,6 +74,17 @@ const Volunteers = ({ type }: VolunteersProps) => {
       const polyData = polySnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Policeman));
       setPolicemen(polyData);
 
+      // Fetch Escalas for the month to calculate used cotas
+      const escQ = query(collection(db, 'escalas'));
+      const escSnap = await getDocs(escQ);
+      const allEscalas = escSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      // Filter by date (YYYY-MM)
+      const monthEscalas = allEscalas.filter(e => {
+        const d = typeof e.date === 'string' ? e.date : e.date?.toDate?.().toISOString() || '';
+        return d.startsWith(monthKey);
+      });
+      setEscalas(monthEscalas);
+
       const volQ = query(
         collection(db, 'volunteers'), 
         where('type', '==', type),
@@ -81,9 +94,26 @@ const Volunteers = ({ type }: VolunteersProps) => {
       const volData = volSnap.docs.map(vDoc => {
         const v = { id: vDoc.id, ...vDoc.data() } as Volunteer;
         const p = polyData.find(police => police.id === v.policemanId);
+        
+        // Calculate scaled cotas for this type
+        // Note: we need to know if the escala is PJES or OPS. 
+        // We'll need to join with ServiceTypes too.
         return { ...v, policeman: p };
       });
-      setVolunteers(volData);
+
+      // To accurately calculate PJES/OPS scaled cotas, we need ServiceTypes
+      const stSnap = await getDocs(collection(db, 'serviceTypes'));
+      const serviceTypes = stSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+      const processedVols = volData.map(v => {
+        const scaledCount = monthEscalas.filter(e => {
+          const st = serviceTypes.find(t => t.id === e.serviceTypeId);
+          return e.policemenIds.includes(v.policemanId) && st?.tipo === type;
+        }).length;
+        return { ...v, scaledCount };
+      });
+
+      setVolunteers(processedVols as any);
     } catch (err) {
       handleFirestoreError(err, OperationType.LIST, 'volunteers');
     } finally {
@@ -353,59 +383,97 @@ const Volunteers = ({ type }: VolunteersProps) => {
             {searchTerm ? 'Nenhum voluntário encontrado para a busca.' : `Nenhum voluntário ${type} cadastrado.`}
           </div>
         ) : (
-          filteredVolunteers.map((v, idx) => (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: idx * 0.05 }}
-              key={v.id}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative group group-hover:border-pmpe-navy/20 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center text-[11px] font-black text-slate-500 group-hover:bg-pmpe-navy group-hover:text-white transition-colors">
-                  {v.policeman?.nomeGuerra.substring(0, 2).toUpperCase() || '?'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-slate-800 text-[13px] leading-none mb-1 truncate">{v.policeman?.nomeGuerra || 'Policial Removido'}</h3>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">{v.policeman?.graduacaoPosto} • {v.policeman?.matricula}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
-                <div className="flex items-center gap-2 px-2 py-0.5 bg-slate-50 rounded border border-slate-100">
-                   <CreditCard className="w-3 h-3 text-slate-400" />
-                   <span className="text-[10px] font-black text-slate-600 uppercase tracking-tighter">Cotas: <span className="text-pmpe-navy">{v.cotas}</span></span>
-                </div>
-                {isAdmin && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <button
-                      onClick={() => handleEdit(v)}
-                      className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded transition-all"
-                      title="Editar Voluntário"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(v.id!)}
-                      className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-all"
-                      title="Remover Voluntário"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+          filteredVolunteers.map((v: any, idx) => {
+            const remaining = v.cotas - (v.scaledCount || 0);
+            return (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: idx * 0.05 }}
+                key={v.id}
+                className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative group transition-all hover:shadow-md"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center text-[11px] font-black text-slate-500 group-hover:bg-pmpe-navy group-hover:text-white transition-colors">
+                    {v.policeman?.nomeGuerra.substring(0, 2).toUpperCase() || '?'}
                   </div>
-                )}
-              </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-slate-800 text-[13px] leading-none mb-1 truncate">{v.policeman?.nomeGuerra || 'Policial Removido'}</h3>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">{v.policeman?.graduacaoPosto} • {v.policeman?.matricula}</p>
+                  </div>
+                </div>
 
-              <div className="absolute -top-1.5 -right-1.5">
-                  <span className={cn(
-                    "px-2 py-0.5 rounded shadow-sm text-[8px] font-black uppercase tracking-widest text-white border border-white/20",
-                    type === 'PJES' ? "bg-pmpe-navy" : "bg-pmpe-gold text-pmpe-navy"
+                <div className="mt-4 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-slate-50 rounded border border-slate-100 flex flex-col justify-center">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Solicitadas</p>
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard className="w-3 h-3 text-slate-400" />
+                        <span className="text-xs font-black text-slate-700">{v.cotas}</span>
+                      </div>
+                    </div>
+                    <div className="p-2 bg-slate-50 rounded border border-slate-100 flex flex-col justify-center">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Escaladas</p>
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span className="text-xs font-black text-slate-700">{v.scaledCount || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={cn(
+                    "p-2 rounded border flex items-center justify-between transition-all",
+                    remaining > 0 ? "bg-blue-50 border-blue-100" : "bg-slate-50 border-slate-100"
                   )}>
-                    {type}
-                  </span>
-              </div>
-            </motion.div>
-          ))
+                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Restantes</p>
+                    <span className={cn(
+                      "text-sm font-black",
+                      remaining > 0 ? "text-pmpe-navy" : "text-slate-400"
+                    )}>{remaining}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <div className={cn(
+                      "w-2 h-2 rounded-full",
+                      remaining > 0 ? "bg-green-500 animate-pulse" : "bg-slate-300"
+                    )} />
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-tight">
+                      {remaining > 0 ? 'Disponível' : 'Cota Esgotada'}
+                    </span>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <button
+                        onClick={() => handleEdit(v)}
+                        className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded transition-all"
+                        title="Editar Voluntário"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(v.id!)}
+                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+                        title="Remover Voluntário"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="absolute -top-1.5 -right-1.5">
+                    <span className={cn(
+                      "px-2 py-0.5 rounded shadow-sm text-[8px] font-black uppercase tracking-widest text-white border border-white/20",
+                      type === 'PJES' ? "bg-pmpe-navy" : "bg-pmpe-gold text-pmpe-navy"
+                    )}>
+                      {type}
+                    </span>
+                </div>
+              </motion.div>
+            );
+          })
         )}
       </div>
 

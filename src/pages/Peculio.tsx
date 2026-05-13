@@ -74,6 +74,9 @@ const Peculio = () => {
     antiguidade: 0,
     telefone: '',
     isMotorista: false,
+    pelotao: '1º PEL',
+    pjesCotasMax: 10,
+    opsCotasMax: 10,
     situacao: 'Ativo'
   });
 
@@ -138,6 +141,9 @@ const Peculio = () => {
         antiguidade: 0,
         telefone: '',
         isMotorista: false,
+        pelotao: '1º PEL',
+        pjesCotasMax: 10,
+        opsCotasMax: 10,
         situacao: 'Ativo'
       });
       fetchData();
@@ -210,6 +216,9 @@ const Peculio = () => {
         antiguidade: p.antiguidade || 0,
         telefone: p.telefone,
         isMotorista: p.isMotorista || false,
+        pelotao: p.pelotao || '1º PEL',
+        pjesCotasMax: p.pjesCotasMax || 10,
+        opsCotasMax: p.opsCotasMax || 10,
         situacao: p.situacao
       });
     } else {
@@ -223,6 +232,9 @@ const Peculio = () => {
         antiguidade: 0,
         telefone: '',
         isMotorista: false,
+        pelotao: '1º PEL',
+        pjesCotasMax: 10,
+        opsCotasMax: 10,
         situacao: 'Ativo'
       });
     }
@@ -593,6 +605,22 @@ const Peculio = () => {
                       <option value="Coronel">Coronel</option>
                     </select>
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Pelotão / Especialidade</label>
+                    <select
+                      required
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all appearance-none"
+                      value={formData.pelotao}
+                      onChange={(e) => setFormData({ ...formData, pelotao: e.target.value })}
+                    >
+                      <option value="1º PEL">1º PEL</option>
+                      <option value="2º PEL">2º PEL</option>
+                      <option value="3º PEL">3º PEL</option>
+                      <option value="GATI">GATI</option>
+                      <option value="ROCAM">ROCAM</option>
+                      <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Matrícula</label>
                     <input
@@ -629,6 +657,24 @@ const Peculio = () => {
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
                       value={formData.telefone}
                       onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Máx. Cotas PJES</label>
+                    <input
+                      type="number"
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
+                      value={formData.pjesCotasMax || 10}
+                      onChange={(e) => setFormData({ ...formData, pjesCotasMax: parseInt(e.target.value) || 10 })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Máx. Cotas OPS</label>
+                    <input
+                      type="number"
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
+                      value={formData.opsCotasMax || 10}
+                      onChange={(e) => setFormData({ ...formData, opsCotasMax: parseInt(e.target.value) || 10 })}
                     />
                   </div>
                   <div className="col-span-2">

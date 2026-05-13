@@ -119,9 +119,16 @@ const CreateEscala = () => {
     const end = endOfMonth(currentMonth);
 
     try {
-      // 1. Fetch Service Types
-      const sSnap = await getDocs(collection(db, 'serviceTypes'));
-      const sData = sSnap.docs.map(d => ({ id: d.id, ...d.data() } as ServiceType));
+      // 1. Fetch Service Types for this month
+      const sSnap = await getDocs(query(collection(db, 'serviceTypes'), where('month', '==', mKey)));
+      const sData = sSnap.docs.map(d => {
+        const data = d.data();
+        return { 
+          id: d.id, 
+          ...data,
+          activeDates: data.activeDates || []
+        } as ServiceType;
+      });
       setServices(sData);
 
       // 2. Fetch Volunteers for the month
@@ -138,7 +145,7 @@ const CreateEscala = () => {
       });
       setVolunteers(vData);
 
-      // 3. Fetch All Scales of the month
+      // 3. Fetch All Scales for the interval
       const eSnap = await getDocs(query(
         collection(db, 'escalas'), 
         where('date', '>=', Timestamp.fromDate(start)),
@@ -256,6 +263,27 @@ const CreateEscala = () => {
     });
   };
 
+  const handleRemoveMember = async (escalaId: string, pId: string) => {
+    if (!confirm(`Deseja remover este policial da escala?`)) return;
+    
+    const escala = allEscalasOfMonth.find(e => e.id === escalaId);
+    if (!escala) return;
+
+    try {
+      if (escala.policemenIds.length <= 1) {
+        await deleteDoc(doc(db, 'escalas', escalaId));
+      } else {
+        await updateDoc(doc(db, 'escalas', escalaId), {
+          policemenIds: escala.policemenIds.filter(id => id !== pId)
+        });
+      }
+      setSelectedEvent(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleDateClick = (info: any) => {
     if (!isAdmin) return;
     setQuickCreateDate(info.date);
@@ -309,6 +337,24 @@ const CreateEscala = () => {
     }
   };
 
+  const calculateFairnessScore = (v: Volunteer & { policeman?: Policeman }) => {
+    const scaledCount = allEscalasOfMonth.filter(e => e.policemenIds.includes(v.policemanId)).length;
+    const quotaRatio = (scaledCount + 1) / (v.cotas + 1); // Lower is higher priority
+    const seniorityFactor = (v.policeman?.antiguidade || 999) / 10000;
+    
+    // Higher score = Higher priority (needed for scale)
+    return (1 - quotaRatio) + (1 - seniorityFactor);
+  };
+
+  const checkIntersticio = (policemanId: string, targetDate: Date) => {
+    const minHoursRest = 12;
+    const sameDayEscalas = allEscalasOfMonth.filter(e => {
+        const diff = Math.abs(e.date.toDate().getTime() - targetDate.getTime());
+        return diff < minHoursRest * 60 * 60 * 1000;
+    });
+    return sameDayEscalas.length === 0;
+  };
+
   const getPolicemanAvailability = (policemanId: string, day: number, date: Date) => {
     const isOrdinary = (ordinarySchedules[policemanId] || []).includes(day);
     if (isOrdinary) return { available: false, reason: 'Serviço Ordinário' };
@@ -324,6 +370,9 @@ const CreateEscala = () => {
     );
     if (alreadyOnScale) return { available: false, reason: 'Já escalado neste dia' };
 
+    const hasRest = checkIntersticio(policemanId, date);
+    if (!hasRest) return { available: false, reason: 'Violação de Interstício (12h)' };
+
     return { available: true };
   };
 
@@ -331,55 +380,77 @@ const CreateEscala = () => {
     if (!selectedServiceId) return [];
     
     return [...filteredVolunteers].sort((a, b) => {
-      const aScaled = allEscalasOfMonth.filter(e => e.policemenIds.includes(a.policemanId)).length;
-      const bScaled = allEscalasOfMonth.filter(e => e.policemenIds.includes(b.policemanId)).length;
-      
-      // Prioritize who used fewer quotas
-      if (aScaled !== bScaled) return aScaled - bScaled;
-      
-      // Then by seniority (optional)
-      return (a.policeman?.antiguidade || 999) - (b.policeman?.antiguidade || 999);
+      return calculateFairnessScore(b) - calculateFairnessScore(a);
     }).slice(0, 5);
   };
 
-  const events = allEscalasOfMonth.flatMap(e => {
-    const s = services.find(srv => srv.id === e.serviceTypeId);
-    
-    // Apply calendar filters
-    if (calendarFilter !== 'ALL') {
-      if (calendarFilter === 'ORD') return []; // Ordinary events are added separately below
-      if (s?.tipo !== calendarFilter) return [];
-    }
+  const events = [
+    // 1. Scaled Policemen
+    ...allEscalasOfMonth.flatMap(e => {
+        const s = services.find(srv => srv.id === e.serviceTypeId);
+        if (calendarFilter !== 'ALL' && s?.tipo !== calendarFilter) return [];
 
-    return e.policemenIds.map(pId => {
-      const p = volunteers.find(v => v.policemanId === pId)?.policeman;
-      const pScaledTotal = allEscalasOfMonth.filter(sc => sc.policemenIds.includes(pId)).length;
-      const v = volunteers.find(vol => vol.policemanId === pId);
+        return e.policemenIds.map(pId => {
+          const v = volunteers.find(vol => vol.policemanId === pId); 
+          const p = v?.policeman;
 
-      return {
-        id: `${e.id}-${pId}`,
-        title: p?.nomeGuerra || 'PM',
-        start: format(e.date.toDate(), 'yyyy-MM-dd'),
-        backgroundColor: s?.color || (s?.tipo === 'PJES' ? '#1e293b' : '#c2410c'),
-        borderColor: s?.color || (s?.tipo === 'PJES' ? '#1e293b' : '#c2410c'),
-        extendedProps: {
-          escalaId: e.id,
-          policemanId: pId,
-          tipo: s?.tipo,
-          categoria: s?.categoria,
-          sigla: s?.sigla,
-          serviceName: s?.nome,
-          nomeGuerra: p?.nomeGuerra,
-          matricula: p?.matricula,
-          graduacao: p?.graduacaoPosto,
-          cidade: s?.cidade,
-          horario: `${s?.horarioInicio} - ${s?.horarioTermino}`,
-          situacao: p?.situacao,
-          cotasInfo: `${pScaledTotal} / ${v?.cotas || 0}`
-        }
-      };
-    });
-  });
+          return {
+            id: `${e.id}-${pId}`,
+            title: p?.nomeGuerra || 'PM',
+            start: format(e.date.toDate(), 'yyyy-MM-dd'),
+            backgroundColor: s?.color || '#1e293b',
+            borderColor: s?.color || '#1e293b',
+            extendedProps: {
+              escalaId: e.id,
+              policemanId: pId,
+              tipo: s?.tipo,
+              categoria: s?.categoria,
+              sigla: s?.sigla,
+              serviceName: s?.nome,
+              nomeGuerra: p?.nomeGuerra,
+              matricula: p?.matricula,
+              graduacao: p?.graduacaoPosto,
+              cidade: s?.cidade,
+              horario: `${s?.horarioInicio} - ${s?.horarioTermino}`,
+              situacao: p?.situacao,
+              cotasInfo: `${allEscalasOfMonth.filter(sc => sc.policemenIds.includes(pId)).length} / ${v?.cotas || 0}`
+            }
+          };
+        });
+    }),
+
+    // 2. Service Demand Indicators (Slots)
+    ...services.flatMap(s => {
+      if (calendarFilter !== 'ALL' && s.tipo !== calendarFilter) return [];
+      
+      return (s.activeDates || []).map(dateStr => {
+        const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
+        const currentCount = escToday?.policemenIds.length || 0;
+        const needed = s.vagasNecessarias || 2;
+        const remaining = needed - currentCount;
+
+        if (remaining <= 0) return null;
+
+        return {
+          id: `slot-${s.id}-${dateStr}`,
+          title: `${s.sigla}: ${remaining} vagas`,
+          start: dateStr,
+          backgroundColor: 'transparent',
+          textColor: s.color,
+          borderColor: s.color,
+          classNames: ['border-dashed', 'border-2'],
+          extendedProps: {
+            isSlot: true,
+            serviceId: s.id,
+            remaining,
+            totalNeeded: needed,
+            serviceName: s.nome,
+            sigla: s.sigla
+          }
+        };
+      }).filter(Boolean);
+    }) as any[]
+  ];
 
   // Highlight availability if a policeman is focused
   if (focusedPolicemanId && !assistedMode) {
@@ -590,12 +661,12 @@ const CreateEscala = () => {
 
                     <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-50 bg-slate-50/50 -mx-3.5 px-3.5 mb-2">
                        <div className="text-center">
-                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Solicit.</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Cotas</p>
                           <p className="text-[12px] font-black text-slate-800">{v.cotas}</p>
                        </div>
                        <div className="text-center">
-                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Escal.</p>
-                          <p className="text-[12px] font-black text-pmpe-navy">{scaledCount}</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Score</p>
+                          <p className="text-[12px] font-black text-pmpe-navy">{Math.round(calculateFairnessScore(v) * 100)}</p>
                        </div>
                        <div className="text-center">
                           <p className="text-[8px] font-bold text-slate-400 uppercase mb-1">Dispon.</p>
@@ -722,14 +793,30 @@ const CreateEscala = () => {
              }}
              dayCellContent={(arg) => {
                const day = parseInt(arg.dayNumberText);
-               const ordinaryExists = Object.values(ordinarySchedules).some(days => days.includes(day));
+               const date = arg.date;
+               const scalesToday = allEscalasOfMonth.filter(e => isSameDay(e.date.toDate(), date));
+               const totalPmToday = scalesToday.reduce((acc, e) => acc + e.policemenIds.length, 0);
                
+               // Target coverage (example: 10 PMs per day across all services)
+               const targetCoverage = 8;
+               const coveragePercent = Math.min((totalPmToday / targetCoverage) * 100, 100);
+
                return (
-                  <div className="flex flex-col items-center justify-center">
+                  <div className="flex flex-col items-center justify-center w-full relative">
                      <span className={cn(
-                       "text-[12px] font-black",
+                       "text-[12px] font-black relative z-10",
                        arg.isToday ? "text-pmpe-navy" : "text-slate-400"
                      )}>{arg.dayNumberText}</span>
+                     
+                     <div className="absolute inset-x-2 bottom-[-10px] h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                           className={cn(
+                              "h-full transition-all duration-500",
+                              coveragePercent >= 100 ? "bg-emerald-500" : coveragePercent > 50 ? "bg-pmpe-gold" : "bg-slate-300"
+                           )}
+                           style={{ width: `${coveragePercent}%` }}
+                        />
+                     </div>
                   </div>
                );
              }}
@@ -839,13 +926,13 @@ const CreateEscala = () => {
                initial={{ scale: 0.9, opacity: 0 }}
                animate={{ scale: 1, opacity: 1 }}
                exit={{ scale: 0.9, opacity: 0 }}
-               className="bg-white rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20"
+               className="bg-white rounded-[32px] w-full max-w-2xl overflow-hidden shadow-2xl border border-white/20"
              >
                 <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                    <div>
-                      <h2 className="text-pmpe-navy font-black text-lg uppercase tracking-tight">Criação Rápida</h2>
+                      <h2 className="text-pmpe-navy font-black text-lg uppercase tracking-tight">Escala para {format(quickCreateDate, "dd 'de' MMMM", { locale: ptBR })}</h2>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                         {format(quickCreateDate, "dd 'de' MMMM", { locale: ptBR })}
+                         Selecione o serviço e os voluntários disponíveis
                       </p>
                    </div>
                    <button onClick={() => setQuickCreateDate(null)} className="p-2 hover:bg-slate-200 rounded-xl transition-colors">
@@ -853,37 +940,54 @@ const CreateEscala = () => {
                    </button>
                 </div>
 
-                <div className="p-8 space-y-6">
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Serviço Selecionado</label>
-                      <div className="p-4 bg-pmpe-navy/5 border border-pmpe-navy/10 rounded-2xl flex items-center gap-3">
-                         <div className="w-10 h-10 bg-pmpe-navy rounded-xl flex items-center justify-center text-white">
-                            {selectedServiceId ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-                         </div>
-                         <div className="flex-1">
-                            <p className="text-xs font-black text-pmpe-navy uppercase">
-                               {services.find(s => s.id === selectedServiceId)?.nome || '-- SELECIONE NA BARRA SUPERIOR --'}
-                            </p>
-                            <p className="text-[10px] font-bold text-slate-500 mt-0.5">
-                               {selectedServiceId ? 'Pronto para escalar' : 'Bloqueado'}
-                            </p>
-                         </div>
+                <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 max-h-[70vh] overflow-y-auto">
+                   <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Serviços Ativos Hoje</label>
+                      <div className="space-y-2">
+                        {services.filter(s => (s.activeDates || []).includes(format(quickCreateDate, 'yyyy-MM-dd'))).map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setSelectedServiceId(s.id!)}
+                            className={cn(
+                              "w-full p-4 rounded-2xl border flex items-center gap-3 transition-all text-left",
+                              selectedServiceId === s.id 
+                                ? "bg-pmpe-navy border-pmpe-navy text-white shadow-lg" 
+                                : "bg-white border-slate-100 hover:border-pmpe-navy/20"
+                            )}
+                          >
+                             <div className={cn(
+                               "w-8 h-8 rounded-lg flex items-center justify-center",
+                               selectedServiceId === s.id ? "bg-white/20" : "bg-slate-100"
+                             )}>
+                                {getServiceIcon(s.categoria)}
+                             </div>
+                             <div>
+                                <p className="text-[11px] font-black uppercase leading-tight">{s.nome}</p>
+                                <p className={cn("text-[9px] font-bold mt-0.5", selectedServiceId === s.id ? "text-white/60" : "text-slate-500")}>
+                                  {s.tipo} • {s.horarioInicio} - {s.horarioTermino}
+                                </p>
+                             </div>
+                          </button>
+                        ))}
                       </div>
                    </div>
 
-                   <div className="space-y-3">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Sugestões (Assisted Mode)</label>
-                      <div className="space-y-2 max-h-60 overflow-y-auto pr-2 scrollbar-thin">
+                   <div className="space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Voluntários Aptos</label>
+                      <div className="space-y-2">
                          {suggestVolunteers().map(v => {
                             const { available, reason } = getPolicemanAvailability(v.policemanId, getDate(quickCreateDate), quickCreateDate);
+                            const currentType = services.find(s => s.id === selectedServiceId)?.tipo;
+                            const isTypeMatch = !selectedServiceId || v.type === currentType;
+
                             return (
                                <button 
                                  key={v.id}
-                                 disabled={!available || !selectedServiceId}
+                                 disabled={!available || !selectedServiceId || !isTypeMatch}
                                  onClick={() => handleQuickCreateSubmit([v.policemanId])}
                                  className={cn(
                                    "w-full p-4 rounded-2xl border flex items-center justify-between transition-all group",
-                                   available && selectedServiceId 
+                                   available && selectedServiceId && isTypeMatch
                                     ? "bg-white border-slate-100 hover:border-pmpe-navy/30 hover:bg-slate-50" 
                                     : "bg-slate-50 border-slate-100 opacity-50 grayscale cursor-not-allowed"
                                  )}
@@ -894,10 +998,10 @@ const CreateEscala = () => {
                                      </div>
                                      <div>
                                         <p className="text-[11px] font-black text-slate-800 uppercase leading-none">{v.policeman?.nomeGuerra}</p>
-                                        <p className="text-[9px] font-bold text-slate-400 mt-1">{available ? `Cotas: ${v.cotas}` : reason}</p>
+                                        <p className="text-[9px] font-bold text-slate-400 mt-1">{available && isTypeMatch ? `Cotas: ${v.cotas}` : reason || 'Tipo divergente'}</p>
                                      </div>
                                   </div>
-                                  {available && selectedServiceId && <Plus className="w-4 h-4 text-pmpe-navy opacity-0 group-hover:opacity-100 transition-opacity" />}
+                                  {available && selectedServiceId && isTypeMatch && <Plus className="w-4 h-4 text-pmpe-navy opacity-0 group-hover:opacity-100 transition-opacity" />}
                                </button>
                             );
                          })}
@@ -910,10 +1014,6 @@ const CreateEscala = () => {
                      onClick={() => setQuickCreateDate(null)}
                      className="flex-1 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest"
                    >Cancelar</button>
-                   <button 
-                     disabled={!selectedServiceId}
-                     className="flex-1 py-4 bg-pmpe-gold text-pmpe-navy rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-pmpe-gold/20 disabled:opacity-50"
-                   >Customizar Escala</button>
                 </div>
              </motion.div>
            </div>

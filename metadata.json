@@ -1,6 +1,6 @@
 {
   "name": "Escalas Extras 9ª CIPM - PMPE",
-  "description": "Sistema de gestão de escalas extras (PJES/OPS) para a 9ª CIPM da PMPE. Gerenciamento de pecúlio, voluntários e serviços.",
+  "description": "Sistema automatizado de gestão de escalas extras (PJES/OPS) com calendário interativo, controle de cotas inteligente e voluntariado instantâneo para a 9ª CIPM.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
