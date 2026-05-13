@@ -155,12 +155,12 @@ const ServiceTypes = () => {
     if (s) {
       setEditingId(s.id!);
       setFormData({
-        nome: s.nome,
-        tipo: s.tipo,
+        nome: s.nome || '',
+        tipo: s.tipo || 'PJES',
         pjesSubtype: s.pjesSubtype || 'MP',
-        cidade: s.cidade,
-        horarioInicio: s.horarioInicio,
-        horarioTermino: s.horarioTermino,
+        cidade: s.cidade || '',
+        horarioInicio: s.horarioInicio || '',
+        horarioTermino: s.horarioTermino || '',
         diasOperacao: s.diasOperacao || [],
         activationType: s.activationType || (s.activeDates?.length ? 'SPECIFIC' : 'ALL'),
         activeDates: s.activeDates || [],
