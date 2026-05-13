@@ -269,7 +269,9 @@ const CreateEscala = () => {
 
   const filteredVolunteers = volunteers.filter(v => {
     const matchesSearch = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.policeman?.matricula.includes(searchTerm);
-    const matchesTab = v.type === activeTab;
+    const hasAnyScale = allEscalasOfMonth.some(e => e.policemenIds.includes(v.policemanId));
+    // Mirror scaled personnel in both tabs as requested
+    const matchesTab = v.type === activeTab || hasAnyScale;
     return matchesSearch && matchesTab;
   });
 
@@ -435,12 +437,12 @@ const CreateEscala = () => {
                       <th 
                         key={day.toISOString()} 
                         className={cn(
-                          "min-w-[36px] p-1 border-b border-white/10 border-l border-white/10 text-center transition-colors",
-                          isWknd ? "bg-slate-900" : "bg-pmpe-navy hover:bg-slate-800"
+                          "min-w-[42px] p-1 border-b border-white/10 border-l border-white/10 text-center transition-colors",
+                          isWknd ? "bg-red-600" : "bg-blue-700 hover:bg-blue-800"
                         )}
                       >
                          <div className="flex flex-col items-center">
-                            <span className="text-[6px] font-black opacity-40 mb-0.5 leading-none">{format(day, 'EEE', { locale: ptBR }).toUpperCase()}</span>
+                            <span className="text-[6px] font-black opacity-60 mb-0.5 leading-none uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
                             <span className="text-[11px] font-black leading-none">{format(day, 'dd')}</span>
                          </div>
                       </th>
@@ -500,31 +502,29 @@ const CreateEscala = () => {
                             })}
                             className={cn(
                               "relative p-0 border-r border-slate-100 transition-all text-center",
-                              !isOrd ? "cursor-pointer hover:bg-slate-200/50" : "bg-pmpe-navy opacity-90",
-                              escala ? "shadow-inner" : ""
+                              !isOrd ? "cursor-pointer hover:bg-slate-200" : "bg-slate-800",
+                              !escala && !isOrd ? "bg-slate-100/80" : ""
                             )}
-                            style={escala?.service?.color ? { backgroundColor: escala.service.color + '20' } : {}}
+                            style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
                           >
                              <div className="w-full h-full flex items-center justify-center font-black text-[9px] uppercase tracking-tighter">
                                 {escala ? (
                                   <motion.span 
                                     initial={{ scale: 0.8 }} 
                                     animate={{ scale: 1 }}
-                                    style={{ color: escala.service?.color || '#1e293b' }}
+                                    className="text-white drop-shadow-sm px-1 truncate"
                                   >
                                     {escala.service?.sigla || 'ESC'}
                                   </motion.span>
                                 ) : isOrd ? (
-                                  <span className="text-white text-[8px] font-black">ORD</span>
+                                  <span className="text-white/30 text-[7px] font-black">ORD</span>
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center group-matrix-cell">
-                                     <span className="text-[9px] font-bold text-slate-100 opacity-30 group-matrix-cell-hover:opacity-100 group-matrix-cell-hover:text-slate-400">X</span>
-                                     <div className="hidden absolute inset-0 bg-emerald-50/50 items-center justify-center text-emerald-600 text-[10px] font-bold group-matrix-cell-hover:flex">0</div>
+                                     <span className="text-[10px] font-bold text-slate-300">0</span>
                                   </div>
                                 )}
                              </div>
                              
-                             {/* Small hover indicator */}
                              {!isOrd && (
                                <div className="absolute inset-x-0 bottom-0 h-0.5 bg-pmpe-navy scale-x-0 group-matrix-cell-hover:scale-x-100 transition-transform origin-center" />
                              )}
@@ -541,19 +541,23 @@ const CreateEscala = () => {
           {/* Matrix Ledger / Legend Footer */}
           <div className="bg-slate-50 border-t border-slate-200 p-4 flex flex-wrap gap-6 items-center shrink-0">
              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-pmpe-navy rounded shadow-sm flex items-center justify-center text-[7px] text-white font-black">ORD</div>
-                <span className="text-[9px] font-black text-slate-500 uppercase">Escala Ordinária</span>
+                <div className="w-4 h-4 bg-red-600 rounded shadow-sm" />
+                <span className="text-[9px] font-black text-slate-500 uppercase">Finais de Semana</span>
              </div>
              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-emerald-50 border border-emerald-200 rounded shadow-sm flex items-center justify-center text-[8px] text-emerald-600 font-bold">0</div>
+                <div className="w-4 h-4 bg-blue-700 rounded shadow-sm" />
+                <span className="text-[9px] font-black text-slate-500 uppercase">Dias de Semana</span>
+             </div>
+             <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-slate-100 border border-slate-200 rounded shadow-sm flex items-center justify-center text-[8px] text-slate-300 font-bold">0</div>
                 <span className="text-[9px] font-black text-slate-500 uppercase">Disponível para Escala</span>
              </div>
              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 bg-white border border-slate-200 rounded shadow-sm flex items-center justify-center text-[8px] text-slate-100 font-bold">X</div>
-                <span className="text-[9px] font-black text-slate-500 uppercase">Folga/Indisponível</span>
+                <div className="w-4 h-4 bg-slate-800 rounded shadow-sm flex items-center justify-center text-[7px] text-white/40 font-black">ORD</div>
+                <span className="text-[9px] font-black text-slate-500 uppercase">Serviço Ordinário</span>
              </div>
              <div className="ml-auto flex items-center gap-2">
-                <span className="text-[9px] font-black text-pmpe-navy uppercase opacity-40">Dica: Clique em qualquer "0" para realizar um lançamento operacional.</span>
+                <span className="text-[9px] font-black text-pmpe-navy uppercase opacity-40 italic tracking-widest">Utilize as SIGLAS dos serviços para identificação.</span>
              </div>
           </div>
 
