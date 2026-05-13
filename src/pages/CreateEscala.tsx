@@ -234,15 +234,7 @@ const CreateEscala = () => {
     const needed = service.cotasPorServico || 1;
     const type = service.tipo as 'PJES' | 'OPS';
     
-    // 2. Quota Checks
-    if (service.quotaMensalLimit && service.quotaMensalLimit > 0) {
-        const usedByThisService = serviceSpecificUsage[serviceId] || 0;
-        if (usedByThisService + needed > service.quotaMensalLimit) {
-          alert(`Erro: Limite de cota mensal para o serviço ${service.sigla} atingido (${usedByThisService}/${service.quotaMensalLimit}).`);
-          return;
-        }
-    }
-
+    // Quota Checks
     let limit = 0;
     let used = 0;
     if (type === 'OPS') { limit = unitQuotas?.opsTotal || 0; used = currentUsage.OPS; }
@@ -872,17 +864,9 @@ const CreateEscala = () => {
                           <div className="flex-1 min-w-0">
                              <div className="flex items-center justify-between gap-2 overflow-hidden">
                                 <p className={cn(
-                                   "text-[9px] font-black uppercase leading-tight truncate",
+                                   "text-[10px] font-black uppercase leading-tight truncate",
                                    selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
                                 )}>{s.nome}</p>
-                                {s.quotaMensalLimit ? (
-                                   <span className={cn(
-                                      "text-[7px] font-black px-1.5 py-0.5 rounded shrink-0",
-                                      selectedServiceId === s.id ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                                   )}>
-                                      {(s.quotaMensalLimit || 0) - (serviceSpecificUsage[s.id!] || 0)} DISP.
-                                   </span>
-                                ) : null}
                              </div>
                              <div className="flex items-center gap-2 mt-1">
                                 <span className={cn(

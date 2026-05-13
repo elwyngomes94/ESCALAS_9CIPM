@@ -479,7 +479,7 @@ const ServiceTypes = () => {
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Mês de Referência</label>
                       <input
@@ -501,17 +501,26 @@ const ServiceTypes = () => {
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
                       />
                     </div>
-                    <div className="col-span-2">
-                       <label className="flex items-center gap-2 cursor-pointer group bg-slate-50 p-3 rounded-lg border border-slate-200 hover:border-pmpe-navy transition-all">
-                          <input
-                            type="checkbox"
-                            checked={formData.isActive}
-                            onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                            className="w-4 h-4 rounded border-slate-300 text-pmpe-navy focus:ring-pmpe-navy"
-                          />
-                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Modalidade Ativa para Novas Escalas</span>
-                       </label>
-                    </div>
+                  </div>
+                  <div className="col-span-2">
+                     <label className="flex items-center gap-3 cursor-pointer group bg-slate-50 p-4 rounded-xl border border-slate-200 hover:border-pmpe-navy transition-all shadow-sm">
+                        <div className={cn(
+                          "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
+                          formData.isActive ? "bg-pmpe-navy border-pmpe-navy" : "bg-white border-slate-300"
+                        )}>
+                          {formData.isActive && <Check className="w-3.5 h-3.5 text-white" />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={formData.isActive}
+                          onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                        />
+                        <div>
+                          <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Modalidade Ativa</p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">Ativa para novas escalas no sistema</p>
+                        </div>
+                     </label>
                   </div>
 
                   {formData.activationType === 'SPECIFIC' && (
