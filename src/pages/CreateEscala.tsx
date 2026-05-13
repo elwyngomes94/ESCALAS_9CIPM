@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   collection, 
   getDocs, 
@@ -13,7 +13,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { Policeman, ServiceType, Volunteer, Escala, QuotaSettings, QuotaLog } from '../types';
+import { Policeman, ServiceType, Volunteer, Escala, QuotaSettings, QuotaLog, OrdinarySchedule } from '../types';
 import { OperationType, handleFirestoreError, cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -26,10 +26,18 @@ import {
   ChevronLeft,
   ChevronRight,
   Trash2,
-  Zap,
   Download,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  Info,
+  ArrowRight,
+  Check,
+  Zap,
+  Filter,
+  Shield,
+  CalendarDays,
+  Target,
+  BarChart3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -40,9 +48,33 @@ import {
   getDate, 
   isSameDay, 
   addMonths,
-  subMonths
+  subMonths,
+  startOfWeek,
+  endOfWeek,
+  isWeekend,
+  isToday,
+  parseISO
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+// Brazilian Holidays 2026 (Simplified for this year)
+const HOLIDAYS_2026: Record<string, string> = {
+  '2026-01-01': 'Confraternização Universal',
+  '2026-02-16': 'Carnaval',
+  '2026-02-17': 'Carnaval',
+  '2026-02-18': 'Quarta-feira de Cinzas',
+  '2026-04-03': 'Sexta-feira Santa',
+  '2026-04-05': 'Páscoa',
+  '2026-04-21': 'Tiradentes',
+  '2026-05-01': 'Dia do Trabalho',
+  '2026-06-04': 'Corpus Christi',
+  '2026-09-07': 'Independência do Brasil',
+  '2026-10-12': 'Nossa Sra. Aparecida',
+  '2026-11-02': 'Finados',
+  '2026-11-15': 'Proclamação da República',
+  '2026-11-20': 'Dia da Consciência Negra',
+  '2026-12-25': 'Natal',
+};
 
 const CreateEscala = () => {
   const { isAdmin } = useAuth();
@@ -55,13 +87,10 @@ const CreateEscala = () => {
   const [success, setSuccess] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'PJES' | 'OPS'>('ALL');
-  
+  const [selectedPMId, setSelectedPMId] = useState<string | null>(null);
+
   const [assignmentModal, setAssignmentModal] = useState<{
     policemanId: string;
-    policemanName: string;
-    policemanMat: string;
-    day: number;
     date: Date;
   } | null>(null);
 
@@ -74,14 +103,28 @@ const CreateEscala = () => {
     OPS: 0
   });
 
+  const mKey = format(currentMonth, 'yyyy-MM');
+
   const fetchData = async () => {
     setLoading(true);
-    const mKey = format(currentMonth, 'yyyy-MM');
     const start = startOfMonth(currentMonth);
     const end = endOfMonth(currentMonth);
 
     try {
-      const sSnap = await getDocs(query(collection(db, 'serviceTypes')));
+      const [sSnap, vSnap, polySnap, eSnap, ordSnap, settingsSnap, logsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'serviceTypes'))),
+        getDocs(query(collection(db, 'volunteers'), where('month', '==', mKey))),
+        getDocs(collection(db, 'policemen')),
+        getDocs(query(
+          collection(db, 'escalas'), 
+          where('date', '>=', Timestamp.fromDate(start)),
+          where('date', '<=', Timestamp.fromDate(end))
+        )),
+        getDocs(query(collection(db, 'ordinarySchedules'), where('month', '==', mKey))),
+        getDocs(query(collection(db, 'quotaSettings'), where('month', '==', mKey))),
+        getDocs(query(collection(db, 'quotaLogs'), where('month', '==', mKey)))
+      ]);
+
       const sData = sSnap.docs.map(d => ({ 
         id: d.id, 
         ...d.data(),
@@ -89,8 +132,6 @@ const CreateEscala = () => {
       } as ServiceType));
       setServices(sData);
 
-      const vSnap = await getDocs(query(collection(db, 'volunteers'), where('month', '==', mKey)));
-      const polySnap = await getDocs(collection(db, 'policemen'));
       const polyData = polySnap.docs.reduce((acc, d) => {
         acc[d.id] = { id: d.id, ...d.data() } as Policeman;
         return acc;
@@ -102,11 +143,6 @@ const CreateEscala = () => {
       });
       setVolunteers(vData);
 
-      const eSnap = await getDocs(query(
-        collection(db, 'escalas'), 
-        where('date', '>=', Timestamp.fromDate(start)),
-        where('date', '<=', Timestamp.fromDate(end))
-      ));
       const eData = eSnap.docs.map(d => {
         const data = d.data() as Escala;
         return { 
@@ -117,22 +153,19 @@ const CreateEscala = () => {
       });
       setAllEscalasOfMonth(eData);
 
-      const ordSnap = await getDocs(query(collection(db, 'ordinarySchedules'), where('month', '==', mKey)));
       const oMap: Record<string, number[]> = {};
       ordSnap.docs.forEach(d => {
-        const data = d.data();
+        const data = d.data() as OrdinarySchedule;
         oMap[data.policemanId] = data.days || [];
       });
       setOrdinarySchedules(oMap);
 
-      const settingsSnap = await getDocs(query(collection(db, 'quotaSettings'), where('month', '==', mKey)));
       let qSettings: QuotaSettings = { month: mKey, pjesMPTotal: 0, pjesForumTotal: 0, pjesEscolarTotal: 0, pjesDecretoTotal: 0, opsTotal: 0 };
       if (!settingsSnap.empty) {
         qSettings = { id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() } as QuotaSettings;
       }
       setUnitQuotas(qSettings);
 
-      const logsSnap = await getDocs(query(collection(db, 'quotaLogs'), where('month', '==', mKey)));
       let usage = { PJES_MP: 0, PJES_FORUM: 0, PJES_ESCOLAR: 0, PJES_DECRETO: 0, OPS: 0 };
       logsSnap.docs.forEach(d => {
         const log = d.data() as QuotaLog;
@@ -157,9 +190,20 @@ const CreateEscala = () => {
     fetchData();
   }, [currentMonth]);
 
+  const selectedVolunteer = useMemo(() => 
+    volunteers.find(v => v.policemanId === selectedPMId),
+  [volunteers, selectedPMId]);
+
+  const calendarDays = useMemo(() => {
+    const start = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
+    const end = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
+    return eachDayOfInterval({ start, end });
+  }, [currentMonth]);
+
   const handleAssignService = async (serviceId: string) => {
-    if (!assignmentModal || !isAdmin) return;
-    const { policemanId, date } = assignmentModal;
+    if (!assignmentModal || !isAdmin || !selectedVolunteer) return;
+    const { date } = assignmentModal;
+    const policemanId = selectedVolunteer.policemanId;
     const service = services.find(s => s.id === serviceId);
     if (!service) return;
 
@@ -252,182 +296,339 @@ const CreateEscala = () => {
     }
   };
 
-  const days = eachDayOfInterval({
-    start: startOfMonth(currentMonth),
-    end: endOfMonth(currentMonth)
+  const filteredVolunteersList = volunteers.filter(v => {
+    const term = searchTerm.toLowerCase();
+    return v.policeman?.nomeGuerra.toLowerCase().includes(term) || v.policeman?.matricula.includes(term);
   });
 
-  const filteredVolunteers = volunteers.filter(v => {
-    const matchesSearch = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.policeman?.matricula.includes(searchTerm);
-    const matchesType = filterType === 'ALL' || v.type === filterType;
-    return matchesSearch && matchesType;
-  });
+  const totalPjesLimit = (unitQuotas?.pjesMPTotal || 0) + (unitQuotas?.pjesForumTotal || 0) + (unitQuotas?.pjesEscolarTotal || 0) + (unitQuotas?.pjesDecretoTotal || 0);
+  const totalPjesUsed = currentUsage.PJES_MP + currentUsage.PJES_FORUM + currentUsage.PJES_ESCOLAR + currentUsage.PJES_DECRETO;
 
-  if (!isAdmin) return <div className="text-center py-20 text-xs font-black uppercase text-slate-400 italic">Acesso restrito.</div>;
+  if (!isAdmin) return (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center p-10 bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm">
+        <Shield className="w-16 h-16 text-rose-500 mx-auto mb-6" />
+        <h3 className="text-lg font-black text-pmpe-navy uppercase mb-2">Acesso Restrito</h3>
+        <p className="text-xs font-bold text-slate-400 uppercase leading-relaxed">Você não possui permissões administrativas para gerenciar escalas.</p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-100px)] overflow-hidden font-sans">
-      {/* Matrix Toolbar */}
-      <div className="bg-white border-b border-slate-200 p-4 flex flex-col md:flex-row items-center justify-between gap-4 shrink-0 shadow-sm z-10">
-        <div className="flex flex-wrap items-center gap-4">
-           <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
-              <button 
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
-              ><ChevronLeft className="w-4 h-4 text-pmpe-navy" /></button>
-              <div className="px-6 flex items-center min-w-[150px] justify-center">
-                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-pmpe-navy">{format(currentMonth, 'MMMM yyyy', { locale: ptBR })}</span>
+    <div className="grid grid-cols-12 gap-6 h-[calc(100vh-100px)] overflow-hidden p-6 font-sans">
+      
+      {/* Left Panel: Operational Calendar */}
+      <div className="col-span-12 lg:col-span-9 flex flex-col gap-6 overflow-hidden">
+        
+        {/* Calendar Header */}
+        <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-6">
+            <div className="w-14 h-14 bg-pmpe-navy rounded-2xl flex items-center justify-center shadow-lg shadow-pmpe-navy/20">
+               <CalendarDays className="w-7 h-7 text-pmpe-gold" />
+            </div>
+            <div>
+              <h2 className="text-xs font-black text-pmpe-navy uppercase tracking-[0.2em]">Calendário Operacional</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xl font-black text-slate-800 uppercase tracking-tighter">
+                  {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                </span>
+                <div className="flex items-center gap-1 ml-2">
+                  <button 
+                    onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                  ><ChevronLeft className="w-4 h-4 text-slate-400" /></button>
+                  <button 
+                    onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                  ><ChevronRight className="w-4 h-4 text-slate-400" /></button>
+                </div>
               </div>
-              <button 
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                className="p-1.5 bg-white shadow-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
-              ><ChevronRight className="w-4 h-4 text-pmpe-navy" /></button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+             <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input 
+                  type="text"
+                  placeholder="Selecionar Policial..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black outline-none focus:ring-4 focus:ring-pmpe-navy/5 w-64 transition-all uppercase"
+                />
+                
+                {/* Search Dropdown */}
+                {searchTerm && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[60] overflow-hidden max-h-60 overflow-y-auto">
+                    {filteredVolunteersList.length > 0 ? filteredVolunteersList.map(v => (
+                      <button 
+                        key={v.id}
+                        onClick={() => {
+                          setSelectedPMId(v.policemanId);
+                          setSearchTerm('');
+                        }}
+                        className="w-full p-4 border-b border-slate-50 text-left hover:bg-pmpe-navy group flex items-center justify-between transition-colors"
+                      >
+                         <div>
+                            <p className="text-[10px] font-black text-pmpe-navy group-hover:text-white uppercase">{v.policeman?.nomeGuerra}</p>
+                            <p className="text-[9px] font-bold text-slate-400 group-hover:text-white/60 uppercase">{v.policeman?.matricula} • {v.policeman?.graduacaoPosto}</p>
+                         </div>
+                         <ArrowRight className="w-4 h-4 text-slate-200 group-hover:text-pmpe-gold" />
+                      </button>
+                    )) : (
+                      <div className="p-4 text-center text-[9px] font-bold text-slate-400 uppercase italic">Nenhum PM voluntário encontrado</div>
+                    )}
+                  </div>
+                )}
+             </div>
+
+             <div className="h-10 w-px bg-slate-100 mx-2" />
+
+             {selectedPMId && (
+               <div className="flex items-center gap-4 animate-in fade-in slide-in-from-right-4">
+                  <div className="text-right">
+                    <p className="text-[9px] font-black text-slate-400 uppercase">Editando Escala de:</p>
+                    <p className="text-[11px] font-black text-pmpe-navy uppercase">{selectedVolunteer?.policeman?.nomeGuerra}</p>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedPMId(null)}
+                    className="w-10 h-10 bg-slate-100 hover:bg-rose-100 hover:text-rose-500 rounded-xl flex items-center justify-center transition-all shadow-sm"
+                  ><X className="w-5 h-5" /></button>
+               </div>
+             )}
+          </div>
+        </div>
+
+        {/* Calendar Grid */}
+        <div className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex-1 overflow-auto relative">
+          <div className="grid grid-cols-7 gap-3 h-full min-h-[600px]">
+             {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+               <div key={d} className="text-center py-4">
+                 <span className={cn(
+                   "text-[10px] font-black uppercase tracking-widest",
+                   d === 'Dom' || d === 'Sáb' ? "text-rose-400" : "text-slate-400"
+                 )}>{d}</span>
+               </div>
+             ))}
+
+             {calendarDays.map((day, i) => {
+               const dayStr = format(day, 'yyyy-MM-dd');
+               const isMonth = format(day, 'MM') === format(currentMonth, 'MM');
+               const weekend = isWeekend(day);
+               const holiday = HOLIDAYS_2026[dayStr];
+               const dayNum = getDate(day);
+               
+               const ordinary = selectedPMId ? (ordinarySchedules[selectedPMId] || []).includes(dayNum) : false;
+               const escalasToday = selectedPMId ? allEscalasOfMonth.filter(e => isSameDay(e.date.toDate(), day) && e.policemenIds.includes(selectedPMId)) : [];
+               
+               const isClickable = isMonth && selectedPMId && !ordinary && !loading;
+
+               return (
+                 <motion.div 
+                   key={dayStr}
+                   initial={{ opacity: 0, scale: 0.95 }}
+                   animate={{ opacity: 1, scale: 1 }}
+                   transition={{ delay: i * 0.005 }}
+                   onClick={() => isClickable && setAssignmentModal({ policemanId: selectedPMId, date: day })}
+                   className={cn(
+                     "rounded-3xl border transition-all p-3 flex flex-col justify-between relative group overflow-hidden h-full min-h-[100px]",
+                     !isMonth ? "bg-slate-50/30 border-transparent opacity-20" : "border-slate-50",
+                     isClickable ? "cursor-pointer hover:shadow-xl hover:border-pmpe-navy/20 hover:-translate-y-1" : "cursor-default",
+                     ordinary ? "bg-pmpe-navy/[0.03] border-pmpe-navy/10" : 
+                     holiday ? "bg-rose-50 border-rose-100" : 
+                     weekend ? "bg-rose-50/20 hover:bg-rose-50/40 border-rose-100/30" : "bg-white",
+                     isToday(day) ? "ring-2 ring-pmpe-gold ring-offset-4" : ""
+                   )}
+                 >
+                    <div className="flex justify-between items-start">
+                       <span className={cn(
+                         "text-[10px] font-black",
+                         holiday ? "text-rose-600" : 
+                         weekend ? "text-rose-400" : 
+                         !isMonth ? "text-slate-300" : "text-pmpe-navy"
+                       )}>{dayNum}</span>
+
+                       {holiday && (
+                         <div className="p-1 bg-rose-600 rounded-lg shadow-lg shadow-rose-200" title={holiday}>
+                           <Zap className="w-2.5 h-2.5 text-white fill-current" />
+                         </div>
+                       )}
+                    </div>
+
+                    <div className="mt-2 space-y-1.5 min-h-[40px] flex flex-col justify-center">
+                       {ordinary && isMonth && (
+                         <div className="flex items-center gap-1.5 px-3 py-1 bg-pmpe-navy text-white rounded-xl w-fit shadow-md">
+                            <Shield className="w-2.5 h-2.5 text-pmpe-gold" />
+                            <span className="text-[9px] font-black uppercase tracking-tighter">ORD</span>
+                         </div>
+                       )}
+
+                       {escalasToday.map(e => (
+                         <div 
+                           key={e.id} 
+                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border w-full shadow-sm"
+                           style={{ backgroundColor: (e.service?.color || '#000') + '15', borderColor: (e.service?.color || '#000') + '30', color: e.service?.color }}
+                         >
+                            <span className="text-[8.5px] font-black uppercase truncate">{e.service?.sigla}</span>
+                         </div>
+                       ))}
+
+                       {!ordinary && escalasToday.length === 0 && isMonth && selectedPMId && (
+                         <div className={cn(
+                           "flex items-center justify-center w-full h-10 rounded-2xl border border-dashed transition-all",
+                           "border-emerald-200 bg-emerald-50/50 group-hover:bg-emerald-100/50 group-hover:border-solid group-hover:border-emerald-400"
+                         )}>
+                            <span className="text-sm font-black text-emerald-600 group-hover:scale-125 transition-transform tracking-widest">0</span>
+                         </div>
+                       )}
+                    </div>
+
+                    {holiday && isMonth && (
+                      <div className="absolute top-0 right-0 p-1 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                         <div className="bg-rose-600 text-white text-[8px] font-black px-3 py-1.5 rounded-bl-2xl uppercase shadow-xl border border-white/20">
+                           {holiday}
+                         </div>
+                      </div>
+                    )}
+                 </motion.div>
+               );
+             })}
+          </div>
+
+          {!selectedPMId && (
+            <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-[40px]">
+               <div className="text-center max-w-sm px-10 py-12 bg-white rounded-[48px] shadow-2xl border border-slate-100">
+                  <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
+                     <Users className="w-10 h-10 text-slate-300" />
+                  </div>
+                  <h3 className="text-sm font-black text-pmpe-navy uppercase mb-3 px-10">Agendamento Operacional</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed">Selecione um Policial acima para gerenciar sua escala de serviço extra individual para este mês.</p>
+                  <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-center gap-6">
+                     <div className="flex flex-col items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <span className="text-[8px] font-black text-slate-400 uppercase">Livre</span>
+                     </div>
+                     <div className="flex flex-col items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-pmpe-navy" />
+                        <span className="text-[8px] font-black text-slate-400 uppercase">Ordinário</span>
+                     </div>
+                     <div className="flex flex-col items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-rose-400" />
+                        <span className="text-[8px] font-black text-slate-400 uppercase">Feriado</span>
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right Panel: Operational Summary */}
+      <div className="col-span-12 lg:col-span-3 flex flex-col gap-6 overflow-hidden">
+        
+        {/* Total Quota Progress */}
+        <div className="bg-pmpe-navy rounded-[40px] p-8 shadow-xl shadow-pmpe-navy/20 text-white shrink-0">
+           <div className="flex items-center gap-3 mb-8">
+              <div className="p-2.5 bg-pmpe-gold/20 rounded-xl">
+                 <BarChart3 className="w-5 h-5 text-pmpe-gold" />
+              </div>
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white/80">Monitor de Cotas</h3>
            </div>
            
-           <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-pmpe-navy transition-colors" />
-              <input 
-                type="text"
-                placeholder="Pesquisar por nome ou matrícula..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-[10px] font-bold outline-none focus:ring-4 focus:ring-pmpe-navy/5 w-72 transition-all"
-              />
-           </div>
-
-           <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-200 shadow-inner">
-              {['ALL', 'PJES', 'OPS'].map(t => (
-                <button 
-                  key={t}
-                  onClick={() => setFilterType(t as any)}
-                  className={cn(
-                    "px-4 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all",
-                    filterType === t ? "bg-pmpe-navy text-white shadow-md" : "text-slate-400 hover:text-slate-600"
-                  )}
-                >{t === 'ALL' ? 'Todos' : t}</button>
-              ))}
-           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-           <button className="flex items-center gap-2 px-5 py-2.5 bg-pmpe-navy text-white rounded-2xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all shadow-lg shadow-pmpe-navy/10">
-              <Download className="w-4 h-4 text-pmpe-gold" /> Exportar Planilha
-           </button>
-        </div>
-      </div>
-
-      {/* High-Density Matrix Table */}
-      <div className="flex-1 overflow-auto bg-slate-50 custom-matrix-scroll p-1">
-        <div className="min-w-fit bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <table className="w-full border-collapse text-[10px] relative">
-            <thead className="sticky top-0 z-[30]">
-              <tr className="bg-pmpe-navy text-white">
-                <th className="sticky left-0 z-40 p-3 border-r border-white/10 w-12 text-center font-black uppercase tracking-tighter bg-pmpe-navy">Posto</th>
-                <th className="sticky left-12 z-40 p-3 border-r border-white/10 w-20 text-center font-black uppercase tracking-tighter bg-pmpe-navy">Mat.</th>
-                <th className="sticky left-32 z-40 p-3 border-r border-white/10 w-52 text-left font-black uppercase tracking-tighter bg-pmpe-navy">Efetivo Braçal</th>
-                
-                {/* Fixed Stats Columns (Gold) */}
-                <th className="p-3 border-r border-white/10 w-14 text-center bg-pmpe-gold text-pmpe-navy font-black">SOLIC.</th>
-                <th className="p-3 border-r border-white/10 w-14 text-center bg-pmpe-gold text-pmpe-navy font-black">DISP.</th>
-                <th className="p-3 border-r border-white/10 w-14 text-center bg-emerald-600 font-black">ESCAL.</th>
-                <th className="p-3 border-r border-white/10 w-14 text-center bg-rose-600 font-black">A ESC.</th>
-                
-                {/* Days Month Matrix */}
-                {days.map(day => {
-                  const isWknd = [0, 6].includes(day.getDay());
-                  return (
-                    <th 
-                      key={day.toISOString()} 
+           <div className="space-y-8">
+              <div className="space-y-3">
+                 <div className="flex justify-between items-end">
+                    <span className="text-[9px] font-black uppercase text-white/40 tracking-widest">PJES Global</span>
+                    <span className="text-xl font-black text-white">{totalPjesUsed}/{totalPjesLimit}</span>
+                 </div>
+                 <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden p-0.5">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(totalPjesUsed / (totalPjesLimit || 1)) * 100}%` }}
                       className={cn(
-                        "p-2 border-r border-white/10 min-w-[36px] text-center transition-colors",
-                        isWknd ? "bg-slate-900" : "bg-pmpe-navy hover:bg-slate-800"
+                        "h-full rounded-full transition-all duration-1000",
+                        (totalPjesUsed / (totalPjesLimit || 1)) > 0.9 ? "bg-rose-500" : "bg-pmpe-gold"
                       )}
-                    >
-                      <div className="flex flex-col items-center">
-                        <span className="text-[7px] font-black opacity-40 mb-0.5">{format(day, 'EEE', { locale: ptBR }).toUpperCase()}</span>
-                        <span className="font-black text-xs">{format(day, 'dd')}</span>
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr><td colSpan={days.length + 7} className="p-20 text-center text-slate-400 font-bold uppercase italic tracking-[0.2em]">Sincronizando Matriz de Escalas...</td></tr>
-              ) : filteredVolunteers.map(v => {
-                const scaledOfMonth = allEscalasOfMonth.filter(e => e.policemenIds.includes(v.policemanId));
-                const scaledCount = scaledOfMonth.length;
-                const aEscalar = (v.cotas || 0) - scaledCount;
+                    />
+                 </div>
+              </div>
 
+              <div className="space-y-3">
+                 <div className="flex justify-between items-end">
+                    <span className="text-[9px] font-black uppercase text-white/40 tracking-widest">OPS Global</span>
+                    <span className="text-xl font-black text-white">{currentUsage.OPS}/{unitQuotas?.opsTotal}</span>
+                 </div>
+                 <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden p-0.5">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(currentUsage.OPS / (unitQuotas?.opsTotal || 1)) * 100}%` }}
+                      className={cn(
+                        "h-full rounded-full transition-all duration-1000",
+                        (currentUsage.OPS/ (unitQuotas?.opsTotal || 1)) > 0.9 ? "bg-rose-500" : "bg-emerald-400"
+                      )}
+                    />
+                 </div>
+              </div>
+           </div>
+
+           <div className="mt-10 pt-8 border-t border-white/10 grid grid-cols-2 gap-6">
+              <div>
+                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Policiais Voluntários</p>
+                <p className="text-lg font-black text-white">{volunteers.length}</p>
+              </div>
+              <div>
+                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Escalas do Mês</p>
+                <p className="text-lg font-black text-white">{allEscalasOfMonth.length}</p>
+              </div>
+           </div>
+        </div>
+
+        {/* Services List / Available Services */}
+        <div className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex-1 overflow-hidden flex flex-col">
+           <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-50 rounded-xl">
+                   <Target className="w-5 h-5 text-pmpe-navy" />
+                </div>
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-pmpe-navy">Serviços Ativos</h3>
+              </div>
+           </div>
+
+           <div className="flex-1 overflow-y-auto space-y-3 scrollbar-none pr-1">
+              {services.map(s => {
+                const countToday = allEscalasOfMonth.filter(e => e.serviceTypeId === s.id && isToday(e.date.toDate())).reduce((acc, e) => acc + e.policemenIds.length, 0);
+                const limit = s.vagasNecessarias || 0;
+                
                 return (
-                  <tr key={v.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="sticky left-0 z-30 p-2 border-r border-slate-100 text-center font-black text-slate-400 bg-white group-hover:bg-slate-50">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
-                    <td className="sticky left-12 z-30 p-2 border-r border-slate-100 text-center font-bold text-slate-400 bg-white group-hover:bg-slate-50">{v.policeman?.matricula}</td>
-                    <td className="sticky left-32 z-30 p-2 border-r border-slate-100 font-black text-pmpe-navy uppercase pl-4 bg-white group-hover:bg-slate-50 truncate">{v.policeman?.nomeGuerra}</td>
-                    
-                    <td className="p-2 border-r border-slate-100 text-center font-black text-amber-600 bg-amber-50/30">{v.cotas}</td>
-                    <td className="p-2 border-r border-slate-100 text-center font-bold text-slate-400 italic">12</td>
-                    <td className="p-2 border-r border-slate-100 text-center font-black text-emerald-600 bg-emerald-50/50">{scaledCount}</td>
-                    <td className={cn(
-                      "p-2 border-r border-slate-100 text-center font-black",
-                      aEscalar > 0 ? "text-rose-600 bg-rose-50/50" : "text-emerald-500"
-                    )}>{aEscalar}</td>
-
-                    {/* Matrix Cells */}
-                    {days.map(date => {
-                      const day = getDate(date);
-                      const isOrd = (ordinarySchedules[v.policemanId] || []).includes(day);
-                      const escToday = scaledOfMonth.find(e => isSameDay(e.date.toDate(), date));
-                      
-                      return (
-                        <td 
-                          key={date.toISOString()}
-                          onClick={() => setAssignmentModal({
-                            policemanId: v.policemanId,
-                            policemanName: v.policeman?.nomeGuerra || 'PM',
-                            policemanMat: v.policeman?.matricula || '',
-                            day,
-                            date
-                          })}
-                          className={cn(
-                            "p-0 border-r border-slate-100 text-center cursor-pointer relative group-cell",
-                            escToday ? "bg-opacity-10" : ""
-                          )}
-                          style={escToday?.service?.color ? { backgroundColor: escToday.service.color + '15' } : {}}
-                        >
-                          <div className="w-full h-9 flex items-center justify-center transition-all hover:bg-pmpe-navy/5 overflow-hidden">
-                            {escToday ? (
-                              <motion.span 
-                                initial={{ scale: 0.8 }}
-                                animate={{ scale: 1 }}
-                                className="w-full h-full flex items-center justify-center font-black text-[9.5px] uppercase tracking-tighter"
-                                style={{ color: escToday.service?.color || '#1e293b' }}
-                              >
-                                {escToday.service?.sigla || 'ESC'}
-                              </motion.span>
-                            ) : isOrd ? (
-                              <span className="text-[10px] font-black text-slate-200 uppercase opacity-40">ORD</span>
-                            ) : (
-                              <span className="text-slate-100 font-bold group-cell-hover:text-slate-300">X</span>
-                            )}
-                            
-                            {/* Hover Tooltip/Action */}
-                            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-pmpe-gold scale-x-0 group-cell-hover:scale-x-100 transition-transform" />
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
+                  <div 
+                    key={s.id} 
+                    className="p-4 bg-slate-50 border border-slate-100 rounded-3xl group hover:border-pmpe-navy/20 transition-all flex items-center justify-between"
+                  >
+                     <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-inner" style={{ backgroundColor: s.color + '10', color: s.color }}>
+                           <span className="text-[9px] font-black">{s.sigla}</span>
+                        </div>
+                        <div>
+                           <p className="text-[10px] font-black text-pmpe-navy uppercase truncate w-32">{s.nome}</p>
+                           <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{s.horarioInicio} - {s.horarioTermino}</p>
+                        </div>
+                     </div>
+                     <div className="text-right">
+                        <p className="text-[10px] font-black text-slate-600">{countToday}/{limit || '∞'}</p>
+                        <p className="text-[8px] font-bold text-slate-400 uppercase">Hoje</p>
+                     </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+           </div>
+
+           <div className="mt-8 pt-8 border-t border-slate-50">
+              <p className="text-[8px] font-bold text-slate-400 leading-relaxed uppercase italic">Passe o mouse por um dia livre para iniciar um novo lançamento operacional.</p>
+           </div>
         </div>
       </div>
 
-      {/* Matrix Assignment Modal */}
+      {/* Modern Assignment Modal */}
       <AnimatePresence>
         {assignmentModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
@@ -435,66 +636,76 @@ const CreateEscala = () => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20"
+              className="bg-white rounded-[48px] w-full max-w-lg overflow-hidden shadow-2xl border border-white/20"
             >
-               <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-pmpe-navy rounded-2xl flex items-center justify-center shadow-lg shadow-pmpe-navy/20">
-                       <Users className="w-7 h-7 text-pmpe-gold" />
+               <div className="p-10 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-pmpe-navy rounded-[24px] flex items-center justify-center shadow-2xl shadow-pmpe-navy/30 relative">
+                       <Users className="w-8 h-8 text-pmpe-gold" />
+                       <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg transform rotate-12">
+                          <Check className="w-3 h-3 text-white" />
+                       </div>
                     </div>
                     <div>
-                      <h3 className="text-base font-black text-pmpe-navy uppercase tracking-tight">{assignmentModal.policemanName}</h3>
-                      <p className="text-[10px] font-bold text-slate-400 mt-1 flex items-center gap-2">
-                        <CalendarIcon className="w-3 h-3" /> 
-                        Dia {format(assignmentModal.date, "dd 'de' MMMM", { locale: ptBR })}
-                      </p>
+                      <h3 className="text-lg font-black text-pmpe-navy uppercase tracking-tight leading-none">{selectedVolunteer?.policeman?.nomeGuerra}</h3>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-[9px] font-black bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full uppercase">{selectedVolunteer?.policeman?.matricula}</span>
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
+                          <CalendarIcon className="w-3 h-3" /> 
+                          {format(assignmentModal.date, "dd 'de' MMMM", { locale: ptBR })}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <button onClick={() => setAssignmentModal(null)} className="p-3 hover:bg-slate-200 rounded-2xl transition-all shadow-sm"><X className="w-5 h-5 text-slate-400" /></button>
+                  <button onClick={() => setAssignmentModal(null)} className="p-4 hover:bg-slate-200 rounded-[20px] transition-all shadow-sm"><X className="w-6 h-6 text-slate-400" /></button>
                </div>
 
-               <div className="p-8 space-y-6 max-h-[65vh] overflow-y-auto scrollbar-none bg-white">
-                  {/* Active Scale Info */}
+               <div className="p-10 space-y-8 max-h-[60vh] overflow-y-auto scrollbar-none bg-white">
+                  
+                  {/* Current Scales on this Day for this PM */}
                   {(() => {
-                    const scaled = allEscalasOfMonth.find(e => 
+                    const scaled = allEscalasOfMonth.filter(e => 
                       isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId)
                     );
-                    if (scaled) {
+                    if (scaled.length > 0) {
                       return (
-                        <div className="p-5 bg-rose-50 border border-rose-100 rounded-3xl flex items-center justify-between shadow-inner">
-                           <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center border border-rose-100 shadow-sm animate-pulse">
-                                 <AlertCircle className="w-6 h-6 text-rose-500" />
-                              </div>
-                              <div>
-                                 <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Escalado em:</p>
-                                 <p className="text-sm font-black text-pmpe-navy uppercase">{scaled.service?.nome}</p>
-                              </div>
-                           </div>
-                           <button 
-                             onClick={() => handleRemoveFromScale(scaled.id!, assignmentModal.policemanId)}
-                             className="p-3 bg-white text-rose-500 rounded-xl shadow-md border border-rose-100 hover:bg-rose-500 hover:text-white transition-all transform active:scale-90"
-                             title="Remover da escala"
-                           ><Trash2 className="w-5 h-5" /></button>
+                        <div className="space-y-3">
+                           <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Escalas Ativas no Dia</label>
+                           {scaled.map(e => (
+                             <div key={e.id} className="p-6 bg-slate-50 border border-slate-100 rounded-[32px] flex items-center justify-between shadow-inner">
+                                <div className="flex items-center gap-4">
+                                   <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm" style={{ color: e.service?.color }}>
+                                      <span className="text-xs font-black">{e.service?.sigla}</span>
+                                   </div>
+                                   <div>
+                                      <p className="text-[10px] font-black text-pmpe-navy uppercase tracking-widest">{e.service?.nome}</p>
+                                      <p className="text-[11px] font-black text-rose-500 uppercase tracking-tighter mt-0.5">Remover deste Serviço?</p>
+                                   </div>
+                                </div>
+                                <button 
+                                  onClick={() => handleRemoveFromScale(e.id!, assignmentModal.policemanId)}
+                                  className="w-12 h-12 bg-white text-rose-500 rounded-2xl shadow-md border border-rose-100 hover:bg-rose-500 hover:text-white transition-all transform active:scale-90 flex items-center justify-center"
+                                ><Trash2 className="w-5 h-5" /></button>
+                             </div>
+                           ))}
                         </div>
                       );
                     }
-                    return (
-                      <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-3xl flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-500 shadow-sm">
-                           <ShieldCheck className="w-5 h-5" />
-                        </div>
-                        <p className="text-[10px] font-black text-emerald-600 uppercase">Policial livre para lançamento</p>
-                      </div>
-                    );
+                    return null;
                   })()}
 
                   <div className="space-y-4">
-                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 ml-1">Lançar Novo Serviço</label>
+                     <div className="flex items-center justify-between px-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Serviços Disponíveis</label>
+                        <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 uppercase">Cotas Disponíveis</span>
+                     </div>
                      <div className="grid grid-cols-1 gap-3">
                         {services.filter(s => {
                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
-                           return s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
+                           const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
+                           // Prevent double scale for same service
+                           const alreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
+                           return isActiveDay && !alreadyIn;
                         }).map(s => {
                            const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date));
                            const pToday = escToday?.policemenIds.length || 0;
@@ -504,28 +715,38 @@ const CreateEscala = () => {
                            return (
                              <button 
                                key={s.id}
-                               disabled={submitting}
+                               disabled={submitting || isFull}
                                onClick={() => handleAssignService(s.id!)}
-                               className="p-5 bg-white border border-slate-100 rounded-[24px] flex items-center justify-between group hover:border-pmpe-navy/30 hover:bg-slate-50 transition-all text-left shadow-md hover:shadow-xl active:scale-[0.98]"
+                               className={cn(
+                                 "p-6 rounded-[32px] flex items-center justify-between group transition-all text-left shadow-lg bg-white border border-slate-100",
+                                 isFull ? "opacity-50 grayscale cursor-not-allowed" : "hover:border-pmpe-navy/30 hover:bg-slate-50 hover:shadow-2xl active:scale-[0.98]"
+                               )}
                              >
-                                <div className="flex items-center gap-4">
-                                   <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110" style={{ backgroundColor: s.color + '15', color: s.color, border: `1px solid ${s.color}20` }}>
-                                      <span className="text-[10px] font-black">{s.sigla}</span>
+                                <div className="flex items-center gap-5">
+                                   <div className="w-14 h-14 rounded-[20px] flex items-center justify-center shadow-xl transition-transform group-hover:scale-110" style={{ backgroundColor: s.color + '15', color: s.color, border: `1px solid ${s.color}20` }}>
+                                      <span className="text-xs font-black">{s.sigla}</span>
                                    </div>
                                    <div>
-                                      <p className="text-[11px] font-black text-slate-800 uppercase leading-tight mb-1 group-hover:text-pmpe-navy">{s.nome}</p>
-                                      <p className="text-[9px] font-bold text-slate-400 flex items-center gap-1.5 uppercase">
-                                        <Clock className="w-3 h-3" /> {s.horarioInicio} - {s.horarioTermino}
-                                      </p>
+                                      <p className="text-[12px] font-black text-pmpe-navy uppercase leading-tight mb-1">{s.nome}</p>
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+                                          <Clock className="w-3 h-3" /> {s.horarioInicio} - {s.horarioTermino}
+                                        </div>
+                                        {s.cotasPorServico > 1 && (
+                                          <span className="text-[8px] font-black bg-rose-50 text-rose-500 px-2 py-0.5 rounded-lg border border-rose-100">-{s.cotasPorServico} COTAS</span>
+                                        )}
+                                      </div>
                                    </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-1">
-                                   <span className={cn(
-                                     "text-[10px] font-black px-3 py-1 rounded-full uppercase border",
-                                     isFull ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                <div className="flex flex-col items-end gap-1.5">
+                                   <div className={cn(
+                                     "text-[10px] font-black px-4 py-1.5 rounded-2xl uppercase border flex items-center gap-2",
+                                     isFull ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-emerald-50 text-emerald-600 border-emerald-100"
                                    )}>
+                                      <Users className="w-3 h-3" />
                                       {pToday}/{target || '∞'}
-                                   </span>
+                                   </div>
+                                   {isFull && <span className="text-[7px] font-black text-rose-500 uppercase">LOTADO</span>}
                                 </div>
                              </button>
                            );
@@ -534,11 +755,11 @@ const CreateEscala = () => {
                   </div>
                </div>
                
-               <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-4">
+               <div className="p-10 bg-slate-50/50 border-t border-slate-100 flex gap-4">
                   <button 
                     onClick={() => setAssignmentModal(null)}
-                    className="flex-1 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
-                  >Fechar</button>
+                    className="flex-1 py-5 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] hover:text-slate-600 transition-colors"
+                  >Cancelar Agendamento</button>
                </div>
             </motion.div>
           </div>
@@ -551,39 +772,35 @@ const CreateEscala = () => {
             initial={{ opacity: 0, y: 100, scale: 0.8 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 100, scale: 0.8 }}
-            className="fixed bottom-10 inset-x-0 mx-auto w-fit bg-pmpe-navy text-white px-8 py-5 rounded-[28px] shadow-2xl z-[150] flex items-center gap-5 border border-white/10"
+            className="fixed bottom-12 inset-x-0 mx-auto w-fit bg-pmpe-navy text-white px-10 py-6 rounded-[32px] shadow-2xl z-[150] flex items-center gap-6 border border-white/10"
           >
-            <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-               <CheckCircle2 className="w-7 h-7 text-white" />
+            <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-500/40">
+               <CheckCircle2 className="w-8 h-8 text-white" />
             </div>
             <div>
-              <p className="text-sm font-black uppercase tracking-tight">Escala de Serviço Salva</p>
-              <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-0.5 italic">Os dados foram sincronizados com a unidade.</p>
+              <p className="text-base font-black uppercase tracking-tight">Agendamento Realizado</p>
+              <p className="text-[10px] font-bold text-white/50 uppercase tracking-[0.2em] mt-1 italic">Sincronização com o sistema de cotas completa.</p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       <style>{`
-        .custom-matrix-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
-        .custom-matrix-scroll::-webkit-scrollbar-track { background: #f8fafc; }
-        .custom-matrix-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; border: 3px solid #f8fafc; }
-        .custom-matrix-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .custom-matrix-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-matrix-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-matrix-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 20px; }
+        .custom-matrix-scroll::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
         
-        .group-cell:hover .group-cell-hover\\:text-slate-300 { color: #cbd5e1; }
-        .group-cell:hover .group-cell-hover\\:scale-x-100 { transform: scaleX(1); }
+        .scrollbar-none::-webkit-scrollbar { display: none; }
+        .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
         
-        table th { letter-spacing: -0.02em; }
-        table td { transition: background-color 0.2s; }
+        input::placeholder { color: #94a3b8; font-weight: 900; letter-spacing: 0.05em; }
         
-        /* Fixed Column Support */
-        table th.sticky, table td.sticky { 
-          position: sticky; 
-          z-index: 10; 
+        @keyframes ring-pulse {
+          0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4); }
+          100% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
         }
-        table th.sticky[left="0"], table td.sticky[left="0"] { left: 0; }
-        table th.sticky[left="48px"], table td.sticky[left="48px"] { left: 48px; }
-        table th.sticky[left="128px"], table td.sticky[left="128px"] { left: 128px; }
+        .ring-pmpe-gold { animation: ring-pulse 2s infinite; }
       `}</style>
     </div>
   );
