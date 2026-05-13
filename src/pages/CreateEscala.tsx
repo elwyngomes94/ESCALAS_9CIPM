@@ -104,11 +104,17 @@ const CreateEscala = () => {
         getDocs(query(collection(db, 'quotaLogs'), where('month', '==', mKey)))
       ]);
 
-      const sData = sSnap.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data(),
-        cotasPorServico: d.data().cotasPorServico ?? d.data().cotasPorEscala ?? 1
-      } as ServiceType));
+      const sData = sSnap.docs.map(d => {
+        const data = d.data();
+        return { 
+          id: d.id, 
+          ...data,
+          activationType: data.activationType || 'ALL',
+          activeDates: data.activeDates || [],
+          month: data.month || mKey,
+          cotasPorServico: data.cotasPorServico ?? data.cotasPorEscala ?? 1
+        } as ServiceType;
+      });
       setServices(sData);
 
       const polyData = polySnap.docs.reduce((acc, d) => {
@@ -599,7 +605,12 @@ const CreateEscala = () => {
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-none">
                  {services
-                   .filter(s => s.tipo === activeTab && (!serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase())))
+                   .filter(s => {
+                      const matchesTab = s.tipo?.toUpperCase() === activeTab;
+                      const matchesMonth = s.month === mKey;
+                      const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
+                      return matchesTab && matchesMonth && matchesSearch;
+                   })
                    .map(s => (
                     <div key={s.id} className="p-3 rounded-2xl border border-slate-50 bg-slate-50/30 hover:bg-white hover:border-slate-200 hover:shadow-md transition-all group cursor-default">
                        <div className="flex items-center gap-3">
@@ -617,13 +628,13 @@ const CreateEscala = () => {
                        </div>
                     </div>
                  ))}
-                 {services.filter(s => s.tipo === activeTab).length === 0 && (
+                 {services.filter(s => s.tipo?.toUpperCase() === activeTab && s.month === mKey).length === 0 && (
                     <div className="p-8 text-center">
                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
                           <AlertCircle className="w-6 h-6 text-slate-300" />
                        </div>
                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">
-                          Nenhum serviço de {activeTab} cadastrado para este mês.
+                          Nenhum serviço de {activeTab} cadastrado para o mês de {format(currentMonth, 'MMMM', { locale: ptBR })}.
                        </p>
                     </div>
                  )}
@@ -740,10 +751,11 @@ const CreateEscala = () => {
                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
                            const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
                            const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
-                           const isCorrectType = s.tipo === activeTab;
+                           const isCorrectType = s.tipo?.toUpperCase() === activeTab;
+                           const matchesMonth = s.month === mKey;
                            const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
                            
-                           return isActiveDay && !isAlreadyIn && isCorrectType && matchesSearch;
+                           return isActiveDay && !isAlreadyIn && isCorrectType && matchesMonth && matchesSearch;
                         }).map(s => {
                            const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date));
                            const pToday = escToday?.policemenIds.length || 0;
