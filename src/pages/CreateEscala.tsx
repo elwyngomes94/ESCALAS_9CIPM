@@ -82,6 +82,8 @@ const CreateEscala = () => {
 
   const mKey = format(currentMonth, 'yyyy-MM');
 
+  const [serviceSearchTerm, setServiceSearchTerm] = useState('');
+
   const fetchData = async () => {
     setLoading(true);
     const start = startOfMonth(currentMonth);
@@ -367,45 +369,54 @@ const CreateEscala = () => {
         
         {/* Statistics Panels Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0">
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-pmpe-navy rounded-2xl text-pmpe-gold">
+           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-pmpe-navy/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+              <div className="p-3 bg-pmpe-navy rounded-2xl text-pmpe-gold relative z-10 shadow-lg shadow-pmpe-navy/20">
                  <Users className="w-5 h-5" />
               </div>
-              <div>
+              <div className="relative z-10">
                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Efetivo {activeTab}</p>
-                 <p className="text-lg font-black text-pmpe-navy">{filteredVolunteers.length}</p>
+                 <p className="text-xl font-black text-pmpe-navy">{filteredVolunteers.length}</p>
               </div>
            </div>
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-emerald-100 rounded-2xl text-emerald-600 border border-emerald-200">
+           
+           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+              <div className="p-3 bg-emerald-100 rounded-2xl text-emerald-600 border border-emerald-200 relative z-10 shadow-lg shadow-emerald-500/10">
                  <CheckCircle2 className="w-5 h-5" />
               </div>
-              <div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Escalas {activeTab}</p>
-                 <p className="text-lg font-black text-pmpe-navy">
+              <div className="relative z-10">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Escalados {activeTab}</p>
+                 <p className="text-xl font-black text-pmpe-navy">
                     {allEscalasOfMonth.filter(e => e.service?.tipo === activeTab).length}
                  </p>
               </div>
            </div>
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-rose-100 rounded-2xl text-rose-600 border border-rose-200">
+
+           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+              <div className="p-3 bg-rose-100 rounded-2xl text-rose-600 border border-rose-200 relative z-10 shadow-lg shadow-rose-500/10">
                  <Zap className="w-5 h-5" />
               </div>
-              <div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">{activeTab} Consumido</p>
-                 <p className="text-lg font-black text-pmpe-navy font-mono">
-                    {activeTab === 'PJES' ? totalPjesUsed : currentUsage.OPS} 
-                    <span className="text-xs text-slate-300"> / {activeTab === 'PJES' ? totalPjesLimit : unitQuotas?.opsTotal}</span>
-                 </p>
+              <div className="relative z-10">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Total {activeTab} Unidade</p>
+                 <div className="flex items-baseline gap-1">
+                    <p className="text-xl font-black text-pmpe-navy font-mono">
+                       {activeTab === 'PJES' ? totalPjesUsed : currentUsage.OPS} 
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-300"> / {activeTab === 'PJES' ? totalPjesLimit : unitQuotas?.opsTotal}</p>
+                 </div>
               </div>
            </div>
-           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-4">
-              <div className="p-3 bg-amber-100 rounded-2xl text-amber-600 border border-amber-200">
+
+           <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-pmpe-gold/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+              <div className="p-3 bg-pmpe-gold/20 rounded-2xl text-amber-600 border border-amber-200 relative z-10 shadow-lg shadow-pmpe-gold/20">
                  <Target className="w-5 h-5" />
               </div>
-              <div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Cotas Disponíveis</p>
-                 <p className="text-lg font-black text-pmpe-navy font-mono">
+              <div className="relative z-10">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Saldo Disponível</p>
+                 <p className="text-xl font-black text-emerald-600 font-mono">
                     {activeTab === 'PJES' ? (totalPjesLimit - totalPjesUsed) : ((unitQuotas?.opsTotal || 0) - currentUsage.OPS)}
                  </p>
               </div>
@@ -641,17 +652,33 @@ const CreateEscala = () => {
                   })()}
 
                   <div className="space-y-4">
-                     <div className="flex items-center justify-between px-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Serviços Ativos em {format(assignmentModal.date, 'dd/MM')}</label>
-                        <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 uppercase italic">Selecione para Agendar</span>
+                     <div className="flex flex-col gap-4 px-1">
+                        <div className="flex items-center justify-between">
+                           <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Serviços Ativos em {format(assignmentModal.date, 'dd/MM')}</label>
+                           <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 uppercase italic">Selecione para Agendar</span>
+                        </div>
+                        
+                        <div className="relative">
+                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                           <input 
+                             type="text"
+                             placeholder="Filtrar Serviços (Sigla ou Nome)..."
+                             value={serviceSearchTerm}
+                             onChange={(e) => setServiceSearchTerm(e.target.value)}
+                             className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-pmpe-navy/10 uppercase"
+                           />
+                        </div>
                      </div>
+
                      <div className="grid grid-cols-1 gap-3">
                         {services.filter(s => {
                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
                            const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
                            const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
                            const isCorrectType = s.tipo === activeTab;
-                           return isActiveDay && !isAlreadyIn && isCorrectType;
+                           const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
+                           
+                           return isActiveDay && !isAlreadyIn && isCorrectType && matchesSearch;
                         }).map(s => {
                            const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date));
                            const pToday = escToday?.policemenIds.length || 0;
