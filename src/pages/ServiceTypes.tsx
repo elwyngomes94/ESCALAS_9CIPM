@@ -53,7 +53,9 @@ const ServiceTypes = () => {
     color: '#003366',
     categoria: 'PATRULHA',
     sigla: 'PTR',
-    vagasNecessarias: 2
+    vagasNecessarias: 2,
+    cotasPorEscala: 1,
+    isActive: true
   });
 
   const fetchData = async () => {
@@ -67,7 +69,9 @@ const ServiceTypes = () => {
           id: doc.id, 
           ...d,
           activeDates: d.activeDates || [],
-          month: d.month || format(new Date(), 'yyyy-MM')
+          month: d.month || format(new Date(), 'yyyy-MM'),
+          cotasPorEscala: d.cotasPorEscala ?? 1,
+          isActive: d.isActive ?? true
         } as ServiceType;
       });
       setServices(data);
@@ -113,7 +117,9 @@ const ServiceTypes = () => {
         color: '#003366',
         categoria: 'PATRULHA',
         sigla: 'PTR',
-        vagasNecessarias: 2
+        vagasNecessarias: 2,
+        cotasPorEscala: 1,
+        isActive: true
       });
       fetchData();
     } catch (err) {
@@ -148,7 +154,9 @@ const ServiceTypes = () => {
         color: s.color || '#003366',
         categoria: s.categoria || 'PATRULHA',
         sigla: s.sigla || 'PTR',
-        vagasNecessarias: s.vagasNecessarias || 2
+        vagasNecessarias: s.vagasNecessarias || 2,
+        cotasPorEscala: s.cotasPorEscala ?? 1,
+        isActive: s.isActive ?? true
       });
     } else {
       setEditingId(null);
@@ -165,7 +173,9 @@ const ServiceTypes = () => {
         color: '#003366',
         categoria: 'PATRULHA',
         sigla: 'PTR',
-        vagasNecessarias: 2
+        vagasNecessarias: 2,
+        cotasPorEscala: 1,
+        isActive: true
       });
     }
     setIsModalOpen(true);
@@ -224,6 +234,8 @@ const ServiceTypes = () => {
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Modalidade</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Tipo</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Cidade</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Cotas</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Status</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Dias Operação</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Carga Horária</th>
                 {isAdmin && <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Ações</th>}
@@ -253,6 +265,19 @@ const ServiceTypes = () => {
                       <MapPin className="w-3 h-3 text-slate-400" />
                       <span className="text-[11px] font-bold uppercase tracking-tight">{s.cidade}</span>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="text-[11px] font-black text-pmpe-navy bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      {s.cotasPorEscala}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className={cn(
+                      "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border",
+                      s.isActive ? "bg-green-50 text-green-600 border-green-100" : "bg-red-50 text-red-600 border-red-100"
+                    )}>
+                      {s.isActive ? 'Ativo' : 'Inativo'}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-0.5 max-w-[120px]">
@@ -429,6 +454,28 @@ const ServiceTypes = () => {
                         onChange={(e) => setFormData({...formData, vagasNecessarias: parseInt(e.target.value)})}
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Cotas Consumidas (por PM)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        required
+                        value={formData.cotasPorEscala}
+                        onChange={(e) => setFormData({...formData, cotasPorEscala: parseInt(e.target.value)})}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                       <label className="flex items-center gap-2 cursor-pointer group bg-slate-50 p-3 rounded-lg border border-slate-200 hover:border-pmpe-navy transition-all">
+                          <input
+                            type="checkbox"
+                            checked={formData.isActive}
+                            onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                            className="w-4 h-4 rounded border-slate-300 text-pmpe-navy focus:ring-pmpe-navy"
+                          />
+                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Modalidade Ativa para Novas Escalas</span>
+                       </label>
                     </div>
                   </div>
 

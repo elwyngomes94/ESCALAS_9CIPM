@@ -10,7 +10,8 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { QuotaSettings, Volunteer, Escala } from '../types';
+import { QuotaSettings, QuotaLog, ServiceType, Escala } from '../types';
+import { OperationType, handleFirestoreError, cn } from '../lib/utils';
 import { 
   ShieldCheck, 
   TrendingUp, 
@@ -18,17 +19,21 @@ import {
   AlertTriangle,
   Save,
   BarChart3,
-  Calendar
+  Calendar,
+  History,
+  ArrowDownCircle,
+  User as UserIcon,
+  Tag
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion } from 'motion/react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 const QuotaControl = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const monthKey = format(currentDate, 'yyyy-MM');
-  const [settings, setSettings] = useState<QuotaSettings | null>(null);
+  const [settings, setSettings] = useState<any | null>(null);
   const [stats, setStats] = useState({
     pjesUsed: 0,
     opsUsed: 0,
@@ -36,6 +41,7 @@ const QuotaControl = () => {
     totalEscalas: 0
   });
   const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<QuotaLog[]>([]);
 
   const fetchStats = async () => {
     setLoading(true);
@@ -43,45 +49,44 @@ const QuotaControl = () => {
       // Fetch settings
       const settingsSnap = await getDocs(query(collection(db, 'quotaSettings'), where('month', '==', monthKey)));
       if (!settingsSnap.empty) {
-        setSettings({ id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() } as QuotaSettings);
+        setSettings({ id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() });
       } else {
         setSettings({ month: monthKey, pjesTotal: 100, opsTotal: 50 });
       }
 
-      // Fetch scales for PJES/OPS usage
+      // Fetch History logs
+      const historyQ = query(
+        collection(db, 'quotaLogs'), 
+        where('month', '==', monthKey),
+        orderBy('data', 'desc')
+      );
+      const historySnap = await getDocs(historyQ);
+      setHistory(historySnap.docs.map(d => ({ id: d.id, ...d.data() }) as QuotaLog));
+
+      // Calculate usage from logs
+      let pjes = 0;
+      let ops = 0;
+      historySnap.docs.forEach(doc => {
+        const log = doc.data() as QuotaLog;
+        if (log.tipo === 'PJES') pjes += log.quantidade;
+        if (log.tipo === 'OPS') ops += log.quantidade;
+      });
+
+      // Also count total scales for stats
       const start = startOfMonth(currentDate);
       const end = endOfMonth(currentDate);
       const escalasSnap = await getDocs(query(collection(db, 'escalas')));
       const monthEscalas = escalasSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as Escala))
         .filter(e => {
-            const date = e.date.toDate();
-            return date >= start && date <= end;
+            const dateStr = typeof e.date === 'string' ? e.date : e.date.toDate().toISOString();
+            return dateStr.startsWith(monthKey);
         });
-
-      // Calculate usage (we need to know the type of each scale)
-      // This is dynamic, so we'll fetch service types too
-      const serviceSnap = await getDocs(collection(db, 'serviceTypes'));
-      const services = serviceSnap.docs.reduce((acc, d) => {
-        const s = d.data();
-        acc[d.id] = s.tipo;
-        return acc;
-      }, {} as any);
-
-      let pjes = 0;
-      let ops = 0;
-      monthEscalas.forEach(e => {
-        const type = services[e.serviceTypeId];
-        if (type === 'PJES') pjes += e.policemenIds.length;
-        if (type === 'OPS') ops += e.policemenIds.length;
-      });
-
-      const volSnap = await getDocs(query(collection(db, 'volunteers'), where('month', '==', monthKey)));
 
       setStats({
         pjesUsed: pjes,
         opsUsed: ops,
-        volunteersCount: volSnap.size,
+        volunteersCount: 0, // Not vital for this dashboard
         totalEscalas: monthEscalas.length
       });
     } catch (err) {
@@ -312,20 +317,113 @@ const QuotaControl = () => {
                 </div>
              </div>
 
-             <div className="bg-slate-100 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between overflow-hidden relative">
+            <div className="bg-slate-100 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between overflow-hidden relative">
                 <div className="absolute right-0 bottom-0 p-2 opacity-10">
                    <AlertTriangle className="w-10 h-10" />
                 </div>
                 <div>
-                   <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Alerta de Excesso</p>
-                   {stats.pjesUsed > (settings?.pjesTotal || 0) || stats.opsUsed > (settings?.opsTotal || 0) ? (
-                     <p className="text-xs font-black text-red-600 mt-1 uppercase tracking-tighter">COTA EXCEDIDA</p>
+                   <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Status Geral</p>
+                   {stats.pjesUsed >= (settings?.pjesTotal || 0) * 0.9 || stats.opsUsed >= (settings?.opsTotal || 0) * 0.9 ? (
+                     <div className="flex items-center gap-2 mt-1">
+                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        <p className="text-xs font-black text-red-600 uppercase tracking-tighter">LIMITE ATINGIDO / ALERTA</p>
+                     </div>
+                   ) : stats.pjesUsed >= (settings?.pjesTotal || 0) * 0.7 || stats.opsUsed >= (settings?.opsTotal || 0) * 0.7 ? (
+                    <div className="flex items-center gap-2 mt-1">
+                       <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                       <p className="text-xs font-black text-amber-600 uppercase tracking-tighter">ATENÇÃO: ALTO CONSUMO</p>
+                    </div>
                    ) : (
-                     <p className="text-xs font-black text-emerald-600 mt-1 uppercase tracking-tighter">DENTRO DOS LIMITES</p>
+                    <div className="flex items-center gap-2 mt-1">
+                       <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                       <p className="text-xs font-black text-emerald-600 uppercase tracking-tighter">DENTRO DOS LIMITES</p>
+                    </div>
                    )}
                 </div>
              </div>
           </div>
+
+          {/* History Table */}
+          <motion.div 
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: 0.2 }}
+             className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+          >
+             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                   <History className="w-4 h-4 text-pmpe-navy" />
+                   <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Histórico de Utilização</h3>
+                </div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Últimas movimentações do mês</span>
+             </div>
+
+             <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                   <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Data/Hora</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Serviço</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Tipo</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Cotas</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Responsável</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">Escala</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100">
+                      {loading ? (
+                        <tr><td colSpan={6} className="px-6 py-12 text-center text-[10px] font-bold text-slate-400 uppercase italic">Carregando histórico...</td></tr>
+                      ) : history.length === 0 ? (
+                        <tr><td colSpan={6} className="px-6 py-12 text-center text-[10px] font-bold text-slate-400 uppercase italic">Nenhuma movimentação registrada</td></tr>
+                      ) : (
+                        history.map((log) => (
+                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                             <td className="px-6 py-4">
+                                <div className="flex flex-col">
+                                   <span className="text-[11px] font-black text-slate-700">{format(log.data.toDate(), 'dd/MM/yyyy')}</span>
+                                   <span className="text-[9px] font-bold text-slate-400 font-mono">{format(log.data.toDate(), 'HH:mm:ss')}</span>
+                                </div>
+                             </td>
+                             <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                   <div className="w-7 h-7 rounded bg-slate-100 flex items-center justify-center">
+                                      <Tag className="w-3.5 h-3.5 text-pmpe-navy" />
+                                   </div>
+                                   <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{log.serviceName}</span>
+                                </div>
+                             </td>
+                             <td className="px-6 py-4 text-center">
+                                <span className={cn(
+                                   "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest text-white",
+                                   log.tipo === 'PJES' ? "bg-pmpe-navy" : "bg-pmpe-gold text-pmpe-navy"
+                                )}>
+                                   {log.tipo}
+                                </span>
+                             </td>
+                             <td className="px-6 py-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                   <ArrowDownCircle className="w-3 h-3 text-red-500" />
+                                   <span className="text-xs font-black text-slate-800">-{log.quantidade}</span>
+                                </div>
+                             </td>
+                             <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                   <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center">
+                                      <UserIcon className="w-3 h-3 text-slate-400" />
+                                   </div>
+                                   <span className="text-[10px] font-bold text-slate-500 truncate max-w-[150px]">{log.usuarioEmail}</span>
+                                </div>
+                             </td>
+                             <td className="px-6 py-4 text-right">
+                                <span className="text-[10px] font-mono font-bold text-slate-300">ID: {log.escalaId.substring(0, 8)}</span>
+                             </td>
+                          </tr>
+                        ))
+                      )}
+                   </tbody>
+                </table>
+             </div>
+          </motion.div>
         </div>
       </div>
     </div>

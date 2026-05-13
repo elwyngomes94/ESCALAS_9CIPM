@@ -39,7 +39,22 @@ export interface ServiceType {
   diasOperacao?: number[];
   observacoes?: string;
   vagasNecessarias?: number;
+  cotasPorEscala: number;
+  isActive: boolean;
   createdAt?: any;
+}
+
+export interface QuotaLog {
+  id?: string;
+  serviceTypeId: string;
+  serviceName: string;
+  escalaId: string;
+  tipo: 'PJES' | 'OPS';
+  quantidade: number;
+  usuarioUid: string;
+  usuarioEmail: string;
+  data: any; // timestamp
+  month: string; // YYYY-MM
 }
 
 export interface Volunteer {

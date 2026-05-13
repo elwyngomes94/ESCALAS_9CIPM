@@ -36,12 +36,13 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [polySnap, escalaSnap, volSnap, serviceSnap, quotaSnap] = await Promise.all([
+        const [polySnap, escalaSnap, volSnap, serviceSnap, quotaSnap, logsSnap] = await Promise.all([
           getDocs(collection(db, 'policemen')),
           getDocs(query(collection(db, 'escalas'), orderBy('date', 'desc'), limit(10))),
           getDocs(query(collection(db, 'volunteers'), where('month', '==', monthKey))),
           getDocs(collection(db, 'serviceTypes')),
-          getDocs(query(collection(db, 'quotaSettings'), where('month', '==', monthKey)))
+          getDocs(query(collection(db, 'quotaSettings'), where('month', '==', monthKey))),
+          getDocs(query(collection(db, 'quotaLogs'), where('month', '==', monthKey)))
         ]);
 
         const services = serviceSnap.docs.reduce((acc, d) => {
@@ -53,10 +54,10 @@ export default function Dashboard() {
         
         let pjes = 0;
         let ops = 0;
-        allEscalas.forEach(e => {
-          const type = services[e.serviceTypeId]?.tipo;
-          if (type === 'PJES') pjes += e.policemenIds.length;
-          if (type === 'OPS') ops += e.policemenIds.length;
+        logsSnap.docs.forEach(d => {
+          const log = d.data();
+          if (log.tipo === 'PJES') pjes += log.quantidade;
+          if (log.tipo === 'OPS') ops += log.quantidade;
         });
 
         setStats({

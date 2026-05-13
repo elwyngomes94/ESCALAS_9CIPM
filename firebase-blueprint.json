@@ -26,9 +26,11 @@
         "horarioInicio": { "type": "string" },
         "horarioTermino": { "type": "string" },
         "observacoes": { "type": "string" },
+        "cotasPorEscala": { "type": "number" },
+        "isActive": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["nome", "tipo", "cidade", "horarioInicio", "horarioTermino"]
+      "required": ["nome", "tipo", "cidade", "horarioInicio", "horarioTermino", "cotasPorEscala", "isActive"]
     },
     "Volunteer": {
       "title": "Volunteer",
@@ -76,6 +78,35 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["policemanId", "month", "days"]
+    },
+    "QuotaSettings": {
+      "title": "Quota Settings",
+      "description": "Limites mensais de cotas para a unidade",
+      "type": "object",
+      "properties": {
+        "month": { "type": "string" },
+        "pjesTotal": { "type": "number" },
+        "opsTotal": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["month", "pjesTotal", "opsTotal"]
+    },
+    "QuotaLog": {
+      "title": "Quota Log",
+      "description": "Logs de consumo de cotas",
+      "type": "object",
+      "properties": {
+        "serviceTypeId": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "escalaId": { "type": "string" },
+        "tipo": { "type": "string", "enum": ["PJES", "OPS"] },
+        "quantidade": { "type": "number" },
+        "usuarioUid": { "type": "string" },
+        "usuarioEmail": { "type": "string" },
+        "data": { "type": "string", "format": "date-time" },
+        "month": { "type": "string" }
+      },
+      "required": ["serviceTypeId", "tipo", "quantidade", "usuarioUid", "month"]
     }
   },
   "firestore": {
@@ -102,6 +133,14 @@
     "ordinarySchedules": {
       "schema": "OrdinarySchedule",
       "description": "Escala ordinária dos policiais (dias fixos de serviço no mês)"
+    },
+    "quotaSettings": {
+      "schema": "QuotaSettings",
+      "description": "Configurações de cotas mensais da unidade"
+    },
+    "quotaLogs": {
+      "schema": "QuotaLog",
+      "description": "Históricos de consumo de cotas"
     }
   }
 }

@@ -52,11 +52,27 @@ service cloud.firestore {
 
     function isValidServiceType(d) {
       return d.nome is string && d.nome.size() <= 100 &&
-             d.tipo in ['PJES', 'OPS'] &&
+             d.tipo in ['PJES', 'OPS', 'ORDINARIO', 'EXTRA'] &&
              d.cidade is string && d.cidade.size() <= 100 &&
              d.horarioInicio is string &&
              d.horarioTermino is string &&
+             d.cotasPorEscala is number &&
+             d.isActive is bool &&
              (d.observacoes == null || d.observacoes is string);
+    }
+
+    function isValidQuotaLog(d) {
+      return isValidId(d.serviceTypeId) &&
+             d.tipo in ['PJES', 'OPS'] &&
+             d.quantidade is number &&
+             d.usuarioUid is string &&
+             d.month is string;
+    }
+
+    function isValidQuotaSettings(d) {
+      return d.month is string &&
+             d.pjesTotal is number &&
+             d.opsTotal is number;
     }
 
     function isValidVolunteer(d) {
@@ -109,6 +125,17 @@ service cloud.firestore {
     match /ordinarySchedules/{scheduleId} {
       allow read: if true;
       allow create, update, delete: if (isAdmin() || true) && isValidId(scheduleId);
+    }
+
+    match /quotaSettings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidId(settingId) && isValidQuotaSettings(incoming());
+    }
+
+    match /quotaLogs/{logId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(logId) && isValidQuotaLog(incoming());
+      allow update, delete: if isAdmin();
     }
   }
 }
