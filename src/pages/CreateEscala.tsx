@@ -215,15 +215,15 @@ const CreateEscala = () => {
     const dateStr = format(date, 'yyyy-MM-dd');
     
     // 1. Strict Duplication Check (Check ALL scales for this person on this day)
-    const typeBeingAssigned = service.tipo; // 'PJES' or 'OPS'
-    const alreadyScaledInSameType = allEscalasOfMonth.find(e => 
-      format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
-      e.policemenIds.includes(policemanId) &&
-      e.service?.tipo === typeBeingAssigned
+    const alreadyScaledToday = allEscalasOfMonth.filter(e => 
+      format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && e.policemenIds.includes(policemanId)
     );
 
-    if (alreadyScaledInSameType) {
-       alert(`Este policial já possui uma escala de ${typeBeingAssigned} para este dia (${alreadyScaledInSameType.service?.sigla}).`);
+    if (alreadyScaledToday.length > 0) {
+       // Allow scaling if it's a DIFFERENT service? 
+       // Usually no, unless explicitly allowed.
+       // The user said "Impedir escala duplicada".
+       alert(`Este policial já possui uma escala para este dia (${alreadyScaledToday[0].service?.sigla}).`);
        return;
     }
 
@@ -632,7 +632,7 @@ const CreateEscala = () => {
                         {days.map(date => {
                           const dayNum = getDate(date);
                           const isOrd = (ordinarySchedules[v.policemanId] || []).includes(dayNum);
-                          const scales = scaledPMRecords.filter(e => isSameDay(e.date.toDate(), date));
+                          const escala = scaledPMRecords.find(e => isSameDay(e.date.toDate(), date));
                           const currentSelectedService = selectedServiceId ? services.find(s => s.id === selectedServiceId) : null;
                           const dateStr = format(date, 'yyyy-MM-dd');
                           const isServiceActiveOnThisDay = currentSelectedService ? (
@@ -640,9 +640,6 @@ const CreateEscala = () => {
                              (currentSelectedService.activeDates || []).includes(dateStr)
                           ) : false;
                           
-                          // Check if person already has a scale of the SAME type as currently selected
-                          const hasSameTypeScale = currentSelectedService && scales.some(s => s.service?.tipo === currentSelectedService.tipo);
-
                           const isCurrentlyTarget = assignmentModal?.policemanId === v.policemanId && isSameDay(assignmentModal.date, date);
                           const isSubmittingThisCell = submitting && isCurrentlyTarget;
                           
@@ -650,7 +647,7 @@ const CreateEscala = () => {
                             <td 
                               key={date.toISOString()}
                               onDragOver={(e) => {
-                                if (!isOrd && !hasSameTypeScale) {
+                                if (!isOrd && !escala) {
                                   e.preventDefault();
                                   e.currentTarget.classList.add('bg-emerald-100');
                                 }
@@ -659,21 +656,13 @@ const CreateEscala = () => {
                                 e.currentTarget.classList.remove('bg-emerald-100');
                               }}
                               onDrop={(e) => {
-                                if (isOrd || submitting) return;
+                                if (isOrd || escala || submitting) return;
                                 e.preventDefault();
                                 e.currentTarget.classList.remove('bg-emerald-100');
                                 const draggedServiceId = e.dataTransfer.getData('serviceId');
                                 if (draggedServiceId) {
                                   // Validation for active day
                                   const ds = services.find(s => s.id === draggedServiceId);
-                                  
-                                  // Specific type check for drop
-                                  const alreadyHasType = ds && scales.some(s => s.service?.tipo === ds.tipo);
-                                  if (alreadyHasType) {
-                                    alert(`Este policial já possui uma escala de ${ds.tipo} para este dia.`);
-                                    return;
-                                  }
-
                                   const dStr = format(date, 'yyyy-MM-dd');
                                   const active = ds && (ds.activationType === 'ALL' || (ds.activeDates || []).includes(dStr));
                                   
@@ -695,12 +684,6 @@ const CreateEscala = () => {
                                     alert('Este serviço não está configurado para estar ativo nesta data.');
                                     return;
                                   }
-                                  
-                                  if (hasSameTypeScale) {
-                                     alert(`Este policial já possui uma escala de ${currentSelectedService?.tipo} para este dia.`);
-                                     return;
-                                  }
-
                                   handleAssignService(selectedServiceId, { 
                                     policemanId: v.policemanId, 
                                     date 
@@ -715,37 +698,25 @@ const CreateEscala = () => {
                                 }
                               }}
                               className={cn(
-                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-12 w-12",
+                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-10 w-10",
                                 !isOrd ? "cursor-pointer" : "bg-slate-800",
-                                scales.length === 0 && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
-                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10" : "",
+                                !escala && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
+                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !escala ? "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10" : "",
                                 isSubmittingThisCell ? "bg-amber-100" : ""
                               )}
+                              style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
                             >
-                               <div className="w-full h-full flex flex-col items-stretch justify-center font-black text-[8px] uppercase tracking-tighter overflow-hidden">
-                                  {isSubmittingThisCell && scales.length === 0 ? (
-                                    <div className="flex items-center justify-center h-full">
-                                      <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                                    </div>
-                                  ) : scales.length > 0 ? (
-                                    <div className="flex flex-col h-full w-full">
-                                      {scales.map((s, idx) => (
-                                        <motion.div 
-                                          key={s.id || idx}
-                                          initial={{ scale: 0.8, opacity: 0 }} 
-                                          animate={{ scale: 1, opacity: 1 }}
-                                          className="flex-1 flex items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0"
-                                          style={{ backgroundColor: s.service?.color || '#334155' }}
-                                        >
-                                          {s.service?.sigla || 'ESC'}
-                                        </motion.div>
-                                      ))}
-                                      {isSubmittingThisCell && (
-                                        <div className="bg-amber-100 flex items-center justify-center py-0.5">
-                                          <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                                        </div>
-                                      )}
-                                    </div>
+                               <div className="w-full h-full flex items-center justify-center font-black text-[9px] uppercase tracking-tighter">
+                                  {isSubmittingThisCell ? (
+                                    <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                  ) : escala ? (
+                                    <motion.span 
+                                      initial={{ scale: 0.8, opacity: 0 }} 
+                                      animate={{ scale: 1, opacity: 1 }}
+                                      className="text-white drop-shadow-sm px-1 truncate"
+                                    >
+                                      {escala.service?.sigla || 'ESC'}
+                                    </motion.span>
                                   ) : isOrd ? (
                                     <span className="text-white/30 text-[7px] font-black">ORD</span>
                                   ) : (
