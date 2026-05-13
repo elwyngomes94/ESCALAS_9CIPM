@@ -56,6 +56,7 @@ const CreateEscala = () => {
   const [services, setServices] = useState<ServiceType[]>([]);
   const [volunteers, setVolunteers] = useState<(Volunteer & { policeman?: Policeman })[]>([]);
   const [allEscalasOfMonth, setAllEscalasOfMonth] = useState<(Escala & { service?: ServiceType })[]>([]);
+  const [policemen, setPolicemen] = useState<Record<string, Policeman>>({});
   const [ordinarySchedules, setOrdinarySchedules] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -123,6 +124,7 @@ const CreateEscala = () => {
         acc[d.id] = { id: d.id, ...d.data() } as Policeman;
         return acc;
       }, {} as Record<string, Policeman>);
+      setPolicemen(polyData);
 
       const vData = vSnap.docs.map(vDoc => {
         const v = { id: vDoc.id, ...vDoc.data() } as Volunteer;
@@ -330,13 +332,60 @@ const CreateEscala = () => {
     end: endOfMonth(currentMonth)
   });
 
-  const filteredVolunteers = volunteers.filter(v => {
-    const matchesSearch = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.policeman?.matricula.includes(searchTerm);
-    const hasAnyScale = allEscalasOfMonth.some(e => e.policemenIds.includes(v.policemanId));
-    // Mirror scaled personnel in both tabs as requested
-    const matchesTab = v.type === activeTab || hasAnyScale;
-    return matchesSearch && matchesTab;
-  });
+  const filteredVolunteers = useMemo(() => {
+    // 1. Group all possible volunteers and scaled people
+    // We want unique policemanId per row
+    const pIds = new Set<string>();
+    volunteers.forEach(v => pIds.add(v.policemanId));
+    allEscalasOfMonth.forEach(e => e.policemenIds.forEach(id => pIds.add(id)));
+
+    const result: (Volunteer & { policeman?: Policeman })[] = [];
+
+    pIds.forEach(pid => {
+      const pVolunteers = volunteers.filter(v => v.policemanId === pid);
+      const hasAnyScale = allEscalasOfMonth.some(e => e.policemenIds.includes(pid));
+      
+      // Filter logic: person belongs to this tab if:
+      // a) They volunteered for this tab's type
+      // b) They were scaled (in any service) - "mirror scaled personnel"
+      const vInTab = pVolunteers.find(v => v.type === activeTab);
+      const shouldShow = !!vInTab || hasAnyScale;
+
+      if (shouldShow) {
+        // Use matching volunteer record or fallback
+        let vRecord = vInTab || pVolunteers[0];
+        
+        if (!vRecord) {
+           vRecord = {
+             id: `virtual-${pid}`,
+             policemanId: pid,
+             type: activeTab,
+             month: mKey,
+             cotas: 0,
+             policeman: policemen[pid]
+           } as any;
+        } else {
+           // If we're displaying an OPS volunteer in PJES tab (or vice versa) 
+           // because they have scales, we treat it as 0 solicited quotas for THIS tab.
+           if (vRecord.type !== activeTab) {
+              vRecord = { ...vRecord, type: activeTab, cotas: 0 };
+           }
+        }
+
+        const poly = vRecord.policeman || policemen[pid];
+        const search = searchTerm.toLowerCase();
+        const matchesSearch = !searchTerm || 
+          poly?.nomeGuerra.toLowerCase().includes(search) || 
+          poly?.matricula.includes(search);
+
+        if (matchesSearch) {
+          result.push({ ...vRecord, policeman: poly });
+        }
+      }
+    });
+
+    return result;
+  }, [volunteers, allEscalasOfMonth, activeTab, searchTerm, policemen, mKey]);
 
   const totalPjesLimit = (unitQuotas?.pjesMPTotal || 0) + (unitQuotas?.pjesForumTotal || 0) + (unitQuotas?.pjesEscolarTotal || 0) + (unitQuotas?.pjesDecretoTotal || 0);
   const totalPjesUsed = currentUsage.PJES_MP + currentUsage.PJES_FORUM + currentUsage.PJES_ESCOLAR + currentUsage.PJES_DECRETO;
@@ -564,6 +613,12 @@ const CreateEscala = () => {
                           const dayNum = getDate(date);
                           const isOrd = (ordinarySchedules[v.policemanId] || []).includes(dayNum);
                           const escala = scaledPMRecords.find(e => isSameDay(e.date.toDate(), date));
+                          const currentSelectedService = selectedServiceId ? services.find(s => s.id === selectedServiceId) : null;
+                          const dateStr = format(date, 'yyyy-MM-dd');
+                          const isServiceActiveOnThisDay = currentSelectedService ? (
+                             currentSelectedService.activationType === 'ALL' || 
+                             (currentSelectedService.activeDates || []).includes(dateStr)
+                          ) : false;
                           
                           return (
                             <td 
@@ -583,6 +638,16 @@ const CreateEscala = () => {
                                 e.currentTarget.classList.remove('bg-emerald-100');
                                 const draggedServiceId = e.dataTransfer.getData('serviceId');
                                 if (draggedServiceId) {
+                                  // Validation for active day
+                                  const ds = services.find(s => s.id === draggedServiceId);
+                                  const dStr = format(date, 'yyyy-MM-dd');
+                                  const active = ds && (ds.activationType === 'ALL' || (ds.activeDates || []).includes(dStr));
+                                  
+                                  if (!active) {
+                                    alert('Este serviço não está ativo para esta data específica.');
+                                    return;
+                                  }
+
                                   handleAssignService(draggedServiceId, { 
                                     policemanId: v.policemanId, 
                                     date 
@@ -592,6 +657,10 @@ const CreateEscala = () => {
                               onClick={() => {
                                 if (isOrd) return;
                                 if (selectedServiceId) {
+                                  if (!isServiceActiveOnThisDay) {
+                                    alert('Este serviço não está configurado para estar ativo nesta data.');
+                                    return;
+                                  }
                                   handleAssignService(selectedServiceId, { 
                                     policemanId: v.policemanId, 
                                     date 
@@ -609,7 +678,7 @@ const CreateEscala = () => {
                                 "relative p-0 border-r-2 border-b-2 border-black transition-all text-center",
                                 !isOrd ? "cursor-pointer hover:bg-slate-200" : "bg-slate-800",
                                 !escala && !isOrd ? "bg-slate-100/80" : "",
-                                selectedServiceId && !isOrd && !escala ? "hover:scale-[1.02] hover:shadow-xl z-20" : ""
+                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !escala ? "hover:scale-[1.05] hover:shadow-2xl z-20 bg-emerald-50/50" : ""
                               )}
                               style={escala?.service?.color ? { backgroundColor: escala.service.color } : {}}
                             >
@@ -628,7 +697,7 @@ const CreateEscala = () => {
                                     <div className="w-full h-full flex items-center justify-center group-matrix-cell">
                                        <span className={cn(
                                           "text-[10px] font-bold transition-all",
-                                          selectedServiceId ? "text-pmpe-navy animate-pulse scale-125" : "text-slate-300"
+                                          selectedServiceId && isServiceActiveOnThisDay ? "text-emerald-600 animate-pulse scale-150" : "text-slate-300"
                                        )}>0</span>
                                     </div>
                                   )}
@@ -718,8 +787,12 @@ const CreateEscala = () => {
                     <div 
                        key={s.id} 
                        onClick={() => setSelectedServiceId(selectedServiceId === s.id ? null : s.id!)}
+                       onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedServiceId(null);
+                       }}
                        className={cn(
-                          "p-3 rounded-2xl border transition-all group cursor-pointer",
+                          "p-3 rounded-2xl border transition-all group cursor-pointer select-none",
                           selectedServiceId === s.id 
                             ? "bg-pmpe-navy border-pmpe-navy shadow-lg ring-2 ring-pmpe-navy/10 -translate-y-1" 
                             : "border-slate-50 bg-slate-50/30 hover:bg-white hover:border-slate-200 hover:shadow-md"
