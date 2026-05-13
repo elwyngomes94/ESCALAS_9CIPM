@@ -431,15 +431,15 @@ const CreateEscala = () => {
               <thead className="sticky top-0 z-[20]">
                 <tr className="bg-pmpe-navy text-white h-14">
                   {/* Fixed Columns Headers */}
-                  <th className="sticky left-0 z-30 p-2 min-w-[48px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b border-white/10">GRA.</th>
-                  <th className="sticky left-[48px] z-30 p-2 min-w-[70px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b border-white/10 border-l border-white/10">MAT.</th>
-                  <th className="sticky left-[118px] z-30 p-4 min-w-[150px] bg-pmpe-navy text-left font-black uppercase text-[8px] border-b border-white/10 border-l border-white/10">EFETIVO</th>
+                  <th className="sticky left-0 z-30 p-2 min-w-[48px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black">GRA.</th>
+                  <th className="sticky left-[48px] z-30 p-2 min-w-[70px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">MAT.</th>
+                  <th className="sticky left-[118px] z-30 p-4 min-w-[150px] bg-pmpe-navy text-left font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">EFETIVO</th>
                   
                   {/* Stats Columns Headers */}
-                  <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b border-white/10 text-center tracking-tighter">SOLIC.</th>
-                  <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b border-white/10 text-center tracking-tighter">DISP.</th>
-                  <th className="p-2 min-w-[48px] bg-emerald-600 font-black text-[7px] uppercase border-b border-white/10 text-center tracking-tighter">ESCAL.</th>
-                  <th className="p-2 min-w-[48px] bg-rose-600 font-black text-[7px] uppercase border-b border-white/10 text-center tracking-tighter">A ESC.</th>
+                  <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">SOLIC.</th>
+                  <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">DISP.</th>
+                  <th className="p-2 min-w-[48px] bg-emerald-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">ESCAL.</th>
+                  <th className="p-2 min-w-[48px] bg-rose-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">A ESC.</th>
                   
                   {/* Days Multi-Column (Matrix) */}
                   {days.map(day => {
@@ -448,7 +448,7 @@ const CreateEscala = () => {
                       <th 
                         key={day.toISOString()} 
                         className={cn(
-                          "min-w-[42px] p-1 border-b border-white/10 border-l border-white/10 text-center transition-colors",
+                          "min-w-[42px] p-1 border-b-2 border-black border-l-2 border-black text-center transition-colors",
                           isWknd ? "bg-red-600" : "bg-blue-700 hover:bg-blue-800"
                         )}
                       >
@@ -481,18 +481,18 @@ const CreateEscala = () => {
                   return (
                     <tr key={v.id} className="h-10 hover:bg-slate-50 transition-colors group">
                       {/* Fixed ID Info */}
-                      <td className="sticky left-0 z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-black text-slate-400 border-r border-slate-100">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
-                      <td className="sticky left-[48px] z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-400 border-r border-slate-100">{v.policeman?.matricula}</td>
-                      <td className="sticky left-[118px] z-10 p-2 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-4 border-r border-slate-100 truncate shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]">
+                      <td className="sticky left-0 z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-black text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
+                      <td className="sticky left-[48px] z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.matricula}</td>
+                      <td className="sticky left-[118px] z-10 p-2 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-4 border-r-2 border-b-2 border-black truncate">
                          {v.policeman?.nomeGuerra}
                       </td>
 
                       {/* Stats Dynamic Columns */}
-                      <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r border-slate-100">{solicted}</td>
-                      <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r border-slate-100">{days.length - (ordinarySchedules[v.policemanId]?.length || 0)}</td>
-                      <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r border-slate-100">{scaledCount}</td>
+                      <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r-2 border-b-2 border-black">{solicted}</td>
+                      <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r-2 border-b-2 border-black">{days.length - (ordinarySchedules[v.policemanId]?.length || 0)}</td>
+                      <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r-2 border-b-2 border-black">{scaledCount}</td>
                       <td className={cn(
-                        "text-center font-black border-r border-slate-100 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]",
+                        "text-center font-black border-r-2 border-b-2 border-black",
                         remaining > 0 ? "bg-rose-50/50 text-rose-600" : "bg-emerald-50 text-emerald-500"
                       )}>{remaining}</td>
 
@@ -512,7 +512,7 @@ const CreateEscala = () => {
                               date
                             })}
                             className={cn(
-                              "relative p-0 border-r border-slate-100 transition-all text-center",
+                              "relative p-0 border-r-2 border-b-2 border-black transition-all text-center",
                               !isOrd ? "cursor-pointer hover:bg-slate-200" : "bg-slate-800",
                               !escala && !isOrd ? "bg-slate-100/80" : ""
                             )}
