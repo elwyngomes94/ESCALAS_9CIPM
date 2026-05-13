@@ -60,6 +60,8 @@ export default function Dashboard() {
           if (log.tipo === 'OPS') ops += log.quantidade;
         });
 
+        const totalPjesLimit = (quotas?.pjesMPTotal || 0) + (quotas?.pjesForumTotal || 0) + (quotas?.pjesEscolarTotal || 0) + (quotas?.pjesDecretoTotal || 0);
+
         setStats({
           totalPolice: polySnap.size,
           activeScales: allEscalas.filter(e => isToday(e.date.toDate())).length,
@@ -69,7 +71,8 @@ export default function Dashboard() {
         });
 
         if (!quotaSnap.empty) {
-          setQuotas(quotaSnap.docs[0].data() as QuotaSettings);
+          const qData = quotaSnap.docs[0].data() as QuotaSettings;
+          setQuotas(qData);
         }
 
         setRecentEscalas(allEscalas.slice(0, 5).map(e => ({ ...e, service: services[e.serviceTypeId] })));
@@ -153,7 +156,7 @@ export default function Dashboard() {
         <StatCard 
           icon={ShieldAlert} 
           label="Cotas PJES" 
-          value={`${stats.usedPjes}/${quotas?.pjesTotal || 100}`} 
+          value={`${stats.usedPjes}/${(quotas?.pjesMPTotal || 0) + (quotas?.pjesForumTotal || 0) + (quotas?.pjesEscolarTotal || 0) + (quotas?.pjesDecretoTotal || 0) || 0}`} 
           sub="Consumo Mensal"
           color="bg-rose-600"
         />
@@ -232,33 +235,41 @@ export default function Dashboard() {
                   <h3 className="text-xs font-black text-white uppercase tracking-widest">Resumo de Cotas</h3>
                 </div>
                 
-                <div className="space-y-6">
-                   <div className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-black uppercase text-white/70">
-                         <span>PJES Consumido</span>
-                         <span>{Math.round((stats.usedPjes / (quotas?.pjesTotal || 100)) * 100)}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                         <div 
-                           className="h-full bg-pmpe-gold transition-all duration-1000" 
-                           style={{ width: `${(stats.usedPjes / (quotas?.pjesTotal || 100)) * 100}%` }}
-                         />
-                      </div>
-                   </div>
+                {(() => {
+                  const totalPjesLimit = (quotas?.pjesMPTotal || 0) + (quotas?.pjesForumTotal || 0) + (quotas?.pjesEscolarTotal || 0) + (quotas?.pjesDecretoTotal || 0);
+                  const pjesPercent = totalPjesLimit > 0 ? Math.round((stats.usedPjes / totalPjesLimit) * 100) : 0;
+                  const opsPercent = (quotas?.opsTotal || 0) > 0 ? Math.round((stats.usedOps / quotas.opsTotal) * 100) : 0;
 
-                   <div className="space-y-2">
-                       <div className="flex justify-between text-[10px] font-black uppercase text-white/70">
-                          <span>OPS Consumido</span>
-                          <span>{Math.round((stats.usedOps / (quotas?.opsTotal || 100)) * 100)}%</span>
-                       </div>
-                       <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-pmpe-gold transition-all duration-1000" 
-                            style={{ width: `${(stats.usedOps / (quotas?.opsTotal || 100)) * 100}%` }}
-                          />
-                       </div>
-                   </div>
-                </div>
+                  return (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-black uppercase text-white/70">
+                            <span>PJES Consumido</span>
+                            <span>{pjesPercent}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-pmpe-gold transition-all duration-1000" 
+                              style={{ width: `${pjesPercent}%` }}
+                            />
+                          </div>
+                      </div>
+
+                      <div className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-black uppercase text-white/70">
+                            <span>OPS Consumido</span>
+                            <span>{opsPercent}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-pmpe-gold transition-all duration-1000" 
+                              style={{ width: `${opsPercent}%` }}
+                            />
+                          </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 <div className="mt-8 pt-6 border-t border-white/10">
                    <p className="text-[10px] font-bold text-white/40 leading-relaxed uppercase">

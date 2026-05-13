@@ -1,7 +1,10 @@
 export interface QuotaSettings {
   id?: string;
   month: string; // YYYY-MM
-  pjesTotal: number;
+  pjesMPTotal: number;
+  pjesForumTotal: number;
+  pjesEscolarTotal: number;
+  pjesDecretoTotal: number;
   opsTotal: number;
   updatedAt?: any;
 }
@@ -23,14 +26,18 @@ export interface Policeman {
   createdAt?: any;
 }
 
+export type PjesSubtype = 'MP' | 'FORUM' | 'ESCOLAR' | 'DECRETO';
+
 export interface ServiceType {
   id?: string;
   nome: string;
   tipo: 'PJES' | 'OPS' | 'ORDINARIO' | 'EXTRA';
+  pjesSubtype?: PjesSubtype;
   categoria: string; // Patrulha, GGI, Guarda, Operaçãao, Apoio, Supervisão, Tático, etc.
   sigla: string;
   color: string;
   month: string; // YYYY-MM
+  activationType: 'ALL' | 'SPECIFIC';
   activeDates: string[]; // ['2026-05-05', '2026-05-06', ...]
   iconName?: string;
   cidade: string;
@@ -39,7 +46,7 @@ export interface ServiceType {
   diasOperacao?: number[];
   observacoes?: string;
   vagasNecessarias?: number;
-  cotasPorEscala: number;
+  cotasPorServico: number;
   isActive: boolean;
   createdAt?: any;
 }
@@ -50,6 +57,7 @@ export interface QuotaLog {
   serviceName: string;
   escalaId: string;
   tipo: 'PJES' | 'OPS';
+  pjesSubtype?: PjesSubtype;
   quantidade: number;
   usuarioUid: string;
   usuarioEmail: string;
@@ -63,6 +71,7 @@ export interface Volunteer {
   type: 'PJES' | 'OPS';
   cotas: number;
   month: string; // YYYY-MM
+  desiredService?: string;
   createdAt?: any;
 }
 

@@ -13,7 +13,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { Policeman, ServiceType, Volunteer, Escala } from '../types';
+import { Policeman, ServiceType, Volunteer, Escala, QuotaSettings, QuotaLog } from '../types';
 import { OperationType, handleFirestoreError, cn } from '../lib/utils';
 import { sortPolicemen } from '../lib/utils/policeUtils';
 import { useAuth } from '../contexts/AuthContext';
@@ -86,8 +86,14 @@ const CreateEscala = () => {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [calendarFilter, setCalendarFilter] = useState<'ALL' | 'PJES' | 'OPS' | 'ORD'>('ALL');
   const [quickCreateDate, setQuickCreateDate] = useState<Date | null>(null);
-  const [unitQuotas, setUnitQuotas] = useState<any>(null);
-  const [currentUsage, setCurrentUsage] = useState({ PJES: 0, OPS: 0 });
+  const [unitQuotas, setUnitQuotas] = useState<QuotaSettings | null>(null);
+  const [currentUsage, setCurrentUsage] = useState({
+    PJES_MP: 0,
+    PJES_FORUM: 0,
+    PJES_ESCOLAR: 0,
+    PJES_DECRETO: 0,
+    OPS: 0
+  });
 
   const calendarRef = useRef<FullCalendar>(null);
   const draggablesDone = useRef(false);
@@ -122,13 +128,15 @@ const CreateEscala = () => {
 
     try {
       // 1. Fetch Service Types for this month
-      const sSnap = await getDocs(query(collection(db, 'serviceTypes'), where('month', '==', mKey)));
+      const sSnap = await getDocs(query(collection(db, 'serviceTypes')));
       const sData = sSnap.docs.map(d => {
         const data = d.data();
         return { 
           id: d.id, 
           ...data,
-          activeDates: data.activeDates || []
+          activationType: data.activationType || 'SPECIFIC',
+          activeDates: data.activeDates || [],
+          cotasPorServico: data.cotasPorServico ?? data.cotasPorEscala ?? 1
         } as ServiceType;
       });
       setServices(sData);
@@ -174,21 +182,31 @@ const CreateEscala = () => {
 
       // 5. Fetch Unit Quotas and Usage
       const settingsSnap = await getDocs(query(collection(db, 'quotaSettings'), where('month', '==', mKey)));
-      let qSettings = { pjestotal: 100, opsTotal: 50 };
+      let qSettings: QuotaSettings = { month: mKey, pjesMPTotal: 0, pjesForumTotal: 0, pjesEscolarTotal: 0, pjesDecretoTotal: 0, opsTotal: 0 };
       if (!settingsSnap.empty) {
-        qSettings = settingsSnap.docs[0].data() as any;
+        qSettings = { id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() } as QuotaSettings;
       }
       setUnitQuotas(qSettings);
 
       const logsSnap = await getDocs(query(collection(db, 'quotaLogs'), where('month', '==', mKey)));
-      let pjesUsed = 0;
-      let opsUsed = 0;
+      let pMP = 0, pForum = 0, pEscolar = 0, pDecreto = 0, ops = 0;
       logsSnap.docs.forEach(d => {
-        const log = d.data();
-        if (log.tipo === 'PJES') pjesUsed += log.quantidade;
-        if (log.tipo === 'OPS') opsUsed += log.quantidade;
+        const log = d.data() as QuotaLog;
+        if (log.tipo === 'OPS') ops += log.quantidade;
+        else if (log.tipo === 'PJES') {
+          if (log.pjesSubtype === 'MP') pMP += log.quantidade;
+          else if (log.pjesSubtype === 'FORUM') pForum += log.quantidade;
+          else if (log.pjesSubtype === 'ESCOLAR') pEscolar += log.quantidade;
+          else if (log.pjesSubtype === 'DECRETO') pDecreto += log.quantidade;
+        }
       });
-      setCurrentUsage({ PJES: pjesUsed, OPS: opsUsed });
+      setCurrentUsage({
+        PJES_MP: pMP,
+        PJES_FORUM: pForum,
+        PJES_ESCOLAR: pEscolar,
+        PJES_DECRETO: pDecreto,
+        OPS: ops
+      });
 
     } catch (err) {
       console.error(err);
@@ -237,23 +255,39 @@ const CreateEscala = () => {
     const service = services.find(s => s.id === selectedServiceId);
     if (!service) return;
 
-    // Check Unit Quota
-    const needed = service.cotasPorEscala || 1;
-    const type = service.tipo as 'PJES' | 'OPS';
-    const limit = unitQuotas?.[`${type.toLowerCase()}Total`] || 0;
-    const used = currentUsage[type];
+    // Check if this service instance already has a log (meaning it already consumed quota)
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const existingEscala = allEscalasOfMonth.find(e => 
+      e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
+    );
 
-    if (used + needed > limit) {
-      alert(`Erro: Cota de ${type} insuficiente na unidade. Restante: ${limit - used}`);
-      return;
+    const isFirstPM = !existingEscala;
+    const needed = isFirstPM ? (service.cotasPorServico || 1) : 0;
+    
+    if (isFirstPM) {
+      const type = service.tipo as 'PJES' | 'OPS';
+      let limit = 0;
+      let used = 0;
+
+      if (type === 'OPS') {
+        limit = unitQuotas?.opsTotal || 0;
+        used = currentUsage.OPS;
+      } else {
+        const subtype = service.pjesSubtype;
+        if (subtype === 'MP') { limit = unitQuotas?.pjesMPTotal || 0; used = currentUsage.PJES_MP; }
+        else if (subtype === 'FORUM') { limit = unitQuotas?.pjesForumTotal || 0; used = currentUsage.PJES_FORUM; }
+        else if (subtype === 'ESCOLAR') { limit = unitQuotas?.pjesEscolarTotal || 0; used = currentUsage.PJES_ESCOLAR; }
+        else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
+      }
+
+      if (used + needed > limit) {
+        alert(`Erro: Saldo de cotas ${type} ${service.pjesSubtype || ''} insuficiente (${limit - used} restantes)`);
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      const existingEscala = allEscalasOfMonth.find(e => 
-        e.serviceTypeId === selectedServiceId && isSameDay(e.date.toDate(), date)
-      );
-
       let escalaId = existingEscala?.id;
 
       if (existingEscala) {
@@ -270,20 +304,21 @@ const CreateEscala = () => {
           createdAt: serverTimestamp()
         });
         escalaId = docRef.id;
-      }
 
-      // Register Quota Log
-      await addDoc(collection(db, 'quotaLogs'), {
-        serviceTypeId: selectedServiceId,
-        serviceName: service.nome,
-        escalaId: escalaId,
-        tipo: type,
-        quantidade: needed,
-        usuarioUid: auth.currentUser?.uid,
-        usuarioEmail: auth.currentUser?.email,
-        data: serverTimestamp(),
-        month: format(date, 'yyyy-MM')
-      });
+        // Register Quota Log (ONLY for the first PM)
+        await addDoc(collection(db, 'quotaLogs'), {
+          serviceTypeId: selectedServiceId,
+          serviceName: service.nome,
+          escalaId: escalaId,
+          tipo: service.tipo,
+          pjesSubtype: service.pjesSubtype,
+          quantidade: needed,
+          usuarioUid: auth.currentUser?.uid,
+          usuarioEmail: auth.currentUser?.email,
+          data: serverTimestamp(),
+          month: format(date, 'yyyy-MM')
+        });
+      }
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -346,22 +381,38 @@ const CreateEscala = () => {
     const service = services.find(s => s.id === selectedServiceId);
     if (!service) return;
 
-    const neededTotal = (service.cotasPorEscala || 1) * pIds.length;
-    const type = service.tipo as 'PJES' | 'OPS';
-    const limit = unitQuotas?.[`${type.toLowerCase()}Total`] || 0;
-    const used = currentUsage[type];
+    const dateStr = format(quickCreateDate, 'yyyy-MM-dd');
+    const existingEscala = allEscalasOfMonth.find(e => 
+      e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
+    );
 
-    if (used + neededTotal > limit) {
-      alert(`Erro: Cota de ${type} insuficiente na unidade para ${pIds.length} PMs. Restante: ${limit - used}`);
-      return;
+    const isFirstPM = !existingEscala;
+    const needed = isFirstPM ? (service.cotasPorServico || 1) : 0;
+    
+    if (isFirstPM) {
+      const type = service.tipo as 'PJES' | 'OPS';
+      let limit = 0;
+      let used = 0;
+
+      if (type === 'OPS') {
+        limit = unitQuotas?.opsTotal || 0;
+        used = currentUsage.OPS;
+      } else {
+        const subtype = service.pjesSubtype;
+        if (subtype === 'MP') { limit = unitQuotas?.pjesMPTotal || 0; used = currentUsage.PJES_MP; }
+        else if (subtype === 'FORUM') { limit = unitQuotas?.pjesForumTotal || 0; used = currentUsage.PJES_FORUM; }
+        else if (subtype === 'ESCOLAR') { limit = unitQuotas?.pjesEscolarTotal || 0; used = currentUsage.PJES_ESCOLAR; }
+        else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
+      }
+
+      if (used + needed > limit) {
+        alert(`Erro: Cota de ${type} insuficiente na unidade. Restante: ${limit - used}`);
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      const existingEscala = allEscalasOfMonth.find(e => 
-        e.serviceTypeId === selectedServiceId && isSameDay(e.date.toDate(), quickCreateDate)
-      );
-
       let escalaId = existingEscala?.id;
 
       if (existingEscala) {
@@ -379,16 +430,15 @@ const CreateEscala = () => {
           createdAt: serverTimestamp()
         });
         escalaId = docRef.id;
-      }
 
-      // Register Quota Logs (one entry per PM added)
-      for (const pId of pIds) {
+        // Register ONE Quota Log for the group
         await addDoc(collection(db, 'quotaLogs'), {
           serviceTypeId: selectedServiceId,
           serviceName: service.nome,
           escalaId: escalaId,
-          tipo: type,
-          quantidade: service.cotasPorEscala || 1,
+          tipo: service.tipo,
+          pjesSubtype: service.pjesSubtype,
+          quantidade: needed,
           usuarioUid: auth.currentUser?.uid,
           usuarioEmail: auth.currentUser?.email,
           data: serverTimestamp(),
@@ -506,7 +556,16 @@ const CreateEscala = () => {
     ...services.flatMap(s => {
       if (calendarFilter !== 'ALL' && s.tipo !== calendarFilter) return [];
       
-      return (s.activeDates || []).map(dateStr => {
+      const days = eachDayOfInterval({
+        start: startOfMonth(currentMonth),
+        end: endOfMonth(currentMonth)
+      });
+
+      return days.map(day => {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        const isActive = s.activationType === 'ALL' || (s.activeDates || []).includes(dateStr);
+        if (!isActive) return null;
+
         const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
         const currentCount = escToday?.policemenIds.length || 0;
         const needed = s.vagasNecessarias || 2;
@@ -1027,7 +1086,10 @@ const CreateEscala = () => {
                    <div className="space-y-4">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Serviços Ativos Hoje</label>
                       <div className="space-y-2">
-                        {services.filter(s => (s.activeDates || []).includes(format(quickCreateDate, 'yyyy-MM-dd'))).map(s => (
+                        {services.filter(s => {
+                           const dStr = format(quickCreateDate as Date, 'yyyy-MM-dd');
+                           return s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
+                         }).map(s => (
                           <button
                             key={s.id}
                             onClick={() => setSelectedServiceId(s.id!)}

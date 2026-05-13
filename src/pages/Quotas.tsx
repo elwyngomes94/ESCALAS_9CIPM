@@ -25,23 +25,25 @@ import {
   User as UserIcon,
   Tag
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion } from 'motion/react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 const QuotaControl = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const monthKey = format(currentDate, 'yyyy-MM');
-  const [settings, setSettings] = useState<any | null>(null);
+  const [settings, setSettings] = useState<QuotaSettings | null>(null);
   const [stats, setStats] = useState({
-    pjesUsed: 0,
+    pjesMPUsed: 0,
+    pjesForumUsed: 0,
+    pjesEscolarUsed: 0,
+    pjesDecretoUsed: 0,
     opsUsed: 0,
-    volunteersCount: 0,
     totalEscalas: 0
   });
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<QuotaLog[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
 
   const fetchStats = async () => {
     setLoading(true);
@@ -49,10 +51,21 @@ const QuotaControl = () => {
       // Fetch settings
       const settingsSnap = await getDocs(query(collection(db, 'quotaSettings'), where('month', '==', monthKey)));
       if (!settingsSnap.empty) {
-        setSettings({ id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() });
+        setSettings({ id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() } as QuotaSettings);
       } else {
-        setSettings({ month: monthKey, pjesTotal: 100, opsTotal: 50 });
+        setSettings({ 
+          month: monthKey, 
+          pjesMPTotal: 0, 
+          pjesForumTotal: 0, 
+          pjesEscolarTotal: 0, 
+          pjesDecretoTotal: 0, 
+          opsTotal: 0 
+        });
       }
+
+      // Fetch Service Types for the table
+      const serviceSnap = await getDocs(collection(db, 'serviceTypes'));
+      setServiceTypes(serviceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as ServiceType));
 
       // Fetch History logs
       const historyQ = query(
@@ -64,17 +77,19 @@ const QuotaControl = () => {
       setHistory(historySnap.docs.map(d => ({ id: d.id, ...d.data() }) as QuotaLog));
 
       // Calculate usage from logs
-      let pjes = 0;
-      let ops = 0;
+      let pMP = 0, pForum = 0, pEscolar = 0, pDecreto = 0, ops = 0;
       historySnap.docs.forEach(doc => {
         const log = doc.data() as QuotaLog;
-        if (log.tipo === 'PJES') pjes += log.quantidade;
         if (log.tipo === 'OPS') ops += log.quantidade;
+        else if (log.tipo === 'PJES') {
+          if (log.pjesSubtype === 'MP') pMP += log.quantidade;
+          else if (log.pjesSubtype === 'FORUM') pForum += log.quantidade;
+          else if (log.pjesSubtype === 'ESCOLAR') pEscolar += log.quantidade;
+          else if (log.pjesSubtype === 'DECRETO') pDecreto += log.quantidade;
+        }
       });
 
       // Also count total scales for stats
-      const start = startOfMonth(currentDate);
-      const end = endOfMonth(currentDate);
       const escalasSnap = await getDocs(query(collection(db, 'escalas')));
       const monthEscalas = escalasSnap.docs
         .map(d => ({ id: d.id, ...d.data() } as Escala))
@@ -84,9 +99,11 @@ const QuotaControl = () => {
         });
 
       setStats({
-        pjesUsed: pjes,
+        pjesMPUsed: pMP,
+        pjesForumUsed: pForum,
+        pjesEscolarUsed: pEscolar,
+        pjesDecretoUsed: pDecreto,
         opsUsed: ops,
-        volunteersCount: 0, // Not vital for this dashboard
         totalEscalas: monthEscalas.length
       });
     } catch (err) {
@@ -115,18 +132,6 @@ const QuotaControl = () => {
       console.error(err);
     }
   };
-
-  const pjesData = [
-    { name: 'Utilizado', value: stats.pjesUsed },
-    { name: 'Disponível', value: Math.max(0, (settings?.pjesTotal || 0) - stats.pjesUsed) }
-  ];
-
-  const opsData = [
-    { name: 'Utilizado', value: stats.opsUsed },
-    { name: 'Disponível', value: Math.max(0, (settings?.opsTotal || 0) - stats.opsUsed) }
-  ];
-
-  const COLORS = ['#1e293b', '#fbbf24'];
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -163,27 +168,51 @@ const QuotaControl = () => {
 
             <div className="space-y-4">
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black text-pmpe-navy uppercase">Total de Cotas PJES</span>
-                  <span className="text-xs font-black text-slate-800">{settings?.pjesTotal}</span>
-                </div>
+                <label className="block text-[9px] font-black text-pmpe-navy uppercase mb-1">PJES - MP</label>
                 <input 
                   type="number"
-                  value={settings?.pjesTotal || 0}
-                  onChange={(e) => setSettings(prev => prev ? { ...prev, pjesTotal: parseInt(e.target.value) } : null)}
+                  value={settings?.pjesMPTotal || 0}
+                  onChange={(e) => setSettings(prev => prev ? { ...prev, pjesMPTotal: parseFloat(e.target.value) } : null)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold shadow-inner"
                 />
               </div>
 
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="flex justify-between items-center mb-2">
-                   <span className="text-[10px] font-black text-pmpe-navy uppercase">Total de Cotas OPS</span>
-                   <span className="text-xs font-black text-slate-800">{settings?.opsTotal}</span>
-                </div>
+                <label className="block text-[9px] font-black text-pmpe-navy uppercase mb-1">PJES - Fóruns</label>
+                <input 
+                  type="number"
+                  value={settings?.pjesForumTotal || 0}
+                  onChange={(e) => setSettings(prev => prev ? { ...prev, pjesForumTotal: parseFloat(e.target.value) } : null)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold shadow-inner"
+                />
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <label className="block text-[9px] font-black text-pmpe-navy uppercase mb-1">PJES - Patrulha Escolar</label>
+                <input 
+                  type="number"
+                  value={settings?.pjesEscolarTotal || 0}
+                  onChange={(e) => setSettings(prev => prev ? { ...prev, pjesEscolarTotal: parseFloat(e.target.value) } : null)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold shadow-inner"
+                />
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <label className="block text-[9px] font-black text-pmpe-navy uppercase mb-1">PJES - Decreto</label>
+                <input 
+                  type="number"
+                  value={settings?.pjesDecretoTotal || 0}
+                  onChange={(e) => setSettings(prev => prev ? { ...prev, pjesDecretoTotal: parseFloat(e.target.value) } : null)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold shadow-inner"
+                />
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <label className="block text-[9px] font-black text-amber-600 uppercase mb-1">Cotas OPS</label>
                 <input 
                   type="number"
                   value={settings?.opsTotal || 0}
-                  onChange={(e) => setSettings(prev => prev ? { ...prev, opsTotal: parseInt(e.target.value) } : null)}
+                  onChange={(e) => setSettings(prev => prev ? { ...prev, opsTotal: parseFloat(e.target.value) } : null)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold shadow-inner"
                 />
               </div>
@@ -201,102 +230,127 @@ const QuotaControl = () => {
 
         {/* Charts and Stats */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* PJES Chart */}
+          <div className="grid grid-cols-1 gap-6">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"
             >
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-[10px] font-black text-pmpe-navy uppercase">Monitor de PJES</h3>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</p>
-                </div>
-                <div className="text-right">
-                    <span className="text-lg font-black text-slate-800">{Math.round((stats.pjesUsed / (settings?.pjesTotal || 1)) * 100)}%</span>
-                </div>
-              </div>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pjesData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {pjesData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '10px', fontWeight: 'bold' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                 <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[8px] font-black text-slate-400 uppercase">Utilizado</p>
-                    <p className="text-xs font-black text-pmpe-navy">{stats.pjesUsed}</p>
-                 </div>
-                 <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[8px] font-black text-slate-400 uppercase">Restante</p>
-                    <p className="text-xs font-black text-pmpe-gold">{Math.max(0, (settings?.pjesTotal || 0) - stats.pjesUsed)}</p>
-                 </div>
-              </div>
-            </motion.div>
-
-            {/* OPS Chart */}
-            <motion.div 
-               initial={{ opacity: 0, y: 20 }}
-               animate={{ opacity: 1, y: 0 }}
-               transition={{ delay: 0.1 }}
-               className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-[10px] font-black text-pmpe-navy uppercase">Monitor de OPS</h3>
-                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</p>
-                </div>
-                <div className="text-right">
-                    <span className="text-lg font-black text-slate-800">{Math.round((stats.opsUsed / (settings?.opsTotal || 1)) * 100)}%</span>
-                </div>
-              </div>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={opsData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {opsData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', fontSize: '10px', fontWeight: 'bold' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                 <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[8px] font-black text-slate-400 uppercase">Utilizado</p>
-                    <p className="text-xs font-black text-pmpe-navy">{stats.opsUsed}</p>
-                 </div>
-                 <div className="p-2 bg-slate-50 rounded-lg">
-                    <p className="text-[8px] font-black text-slate-400 uppercase">Restante</p>
-                    <p className="text-xs font-black text-pmpe-gold">{Math.max(0, (settings?.opsTotal || 0) - stats.opsUsed)}</p>
-                 </div>
+              <h3 className="text-[10px] font-black text-pmpe-navy uppercase mb-6 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                Consumo por Categoria
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[
+                  { label: 'PJES MP', used: stats.pjesMPUsed, total: settings?.pjesMPTotal || 0, color: 'bg-pmpe-navy' },
+                  { label: 'PJES Fóruns', used: stats.pjesForumUsed, total: settings?.pjesForumTotal || 0, color: 'bg-pmpe-navy' },
+                  { label: 'PJES Escolar', used: stats.pjesEscolarUsed, total: settings?.pjesEscolarTotal || 0, color: 'bg-pmpe-navy' },
+                  { label: 'PJES Decreto', used: stats.pjesDecretoUsed, total: settings?.pjesDecretoTotal || 0, color: 'bg-pmpe-navy' },
+                  { label: 'Cotas OPS', used: stats.opsUsed, total: settings?.opsTotal || 0, color: 'bg-pmpe-gold' },
+                ].map((item, i) => {
+                  const percent = item.total > 0 ? Math.min(100, (item.used / item.total) * 100) : 0;
+                  const statusColor = percent >= 95 ? 'text-red-600' : percent >= 75 ? 'text-amber-600' : 'text-emerald-600';
+                  
+                  return (
+                    <div key={i} className="space-y-2 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="flex justify-between items-end">
+                        <span className="text-[9px] font-black text-slate-500 uppercase">{item.label}</span>
+                        <span className={`text-xs font-black ${statusColor}`}>{Math.round(percent)}%</span>
+                      </div>
+                      <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${percent}%` }}
+                          className={`h-full ${item.color} ${percent >= 90 ? 'bg-red-500' : ''}`}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[9px] font-bold uppercase">
+                        <span className="text-slate-400">Uso: {item.used}</span>
+                        <span className="text-slate-800">Saldo: {Math.max(0, item.total - item.used)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           </div>
+
+          {/* Distribution Table */}
+          <motion.div 
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: 0.1 }}
+             className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+          >
+             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                   <Tag className="w-4 h-4 text-pmpe-navy" />
+                   <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Distribuição por Tipos de Serviços</h3>
+                </div>
+             </div>
+
+             <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                   <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Tipo de Serviço</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Categoria</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Cotas Totais</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-center">Utilizadas</th>
+                         <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">Saldo</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100">
+                      {serviceTypes.map(s => {
+                        const used = history
+                          .filter(h => h.serviceTypeId === s.id)
+                          .reduce((acc, h) => acc + h.quantidade, 0);
+                        
+                        // Find category total from settings
+                        let total = 0;
+                        if (s.tipo === 'OPS') total = settings?.opsTotal || 0;
+                        else if (s.tipo === 'PJES') {
+                          if (s.pjesSubtype === 'MP') total = settings?.pjesMPTotal || 0;
+                          else if (s.pjesSubtype === 'FORUM') total = settings?.pjesForumTotal || 0;
+                          else if (s.pjesSubtype === 'ESCOLAR') total = settings?.pjesEscolarTotal || 0;
+                          else if (s.pjesSubtype === 'DECRETO') total = settings?.pjesDecretoTotal || 0;
+                        }
+
+                        return (
+                          <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{s.nome}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest text-white",
+                                s.tipo === 'PJES' ? "bg-pmpe-navy" : "bg-pmpe-gold text-pmpe-navy"
+                              )}>
+                                {s.tipo} {s.pjesSubtype ? `- ${s.pjesSubtype}` : ''}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="text-[11px] font-black text-slate-400">{total || '-'}</span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="text-[11px] font-black text-red-600">{used}</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <span className={cn(
+                                "text-[11px] font-black",
+                                (total - used) <= 0 ? "text-red-600" : "text-emerald-600"
+                              )}>
+                                {total ? (total - used) : '-'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                   </tbody>
+                </table>
+             </div>
+          </motion.div>
 
           {/* Quick Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -323,22 +377,38 @@ const QuotaControl = () => {
                 </div>
                 <div>
                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Status Geral</p>
-                   {stats.pjesUsed >= (settings?.pjesTotal || 0) * 0.9 || stats.opsUsed >= (settings?.opsTotal || 0) * 0.9 ? (
-                     <div className="flex items-center gap-2 mt-1">
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        <p className="text-xs font-black text-red-600 uppercase tracking-tighter">LIMITE ATINGIDO / ALERTA</p>
-                     </div>
-                   ) : stats.pjesUsed >= (settings?.pjesTotal || 0) * 0.7 || stats.opsUsed >= (settings?.opsTotal || 0) * 0.7 ? (
-                    <div className="flex items-center gap-2 mt-1">
-                       <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                       <p className="text-xs font-black text-amber-600 uppercase tracking-tighter">ATENÇÃO: ALTO CONSUMO</p>
-                    </div>
-                   ) : (
-                    <div className="flex items-center gap-2 mt-1">
-                       <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                       <p className="text-xs font-black text-emerald-600 uppercase tracking-tighter">DENTRO DOS LIMITES</p>
-                    </div>
-                   )}
+                   {(() => {
+                     const totalPjesLimit = (settings?.pjesMPTotal || 0) + (settings?.pjesForumTotal || 0) + (settings?.pjesEscolarTotal || 0) + (settings?.pjesDecretoTotal || 0);
+                     const totalPjesUsed = stats.pjesMPUsed + stats.pjesForumUsed + stats.pjesEscolarUsed + stats.pjesDecretoUsed;
+                     const opsLimit = settings?.opsTotal || 0;
+                     const opsUsed = stats.opsUsed;
+
+                     const isCritical = (totalPjesLimit > 0 && totalPjesUsed >= totalPjesLimit * 0.95) || (opsLimit > 0 && opsUsed >= opsLimit * 0.95);
+                     const isWarning = (totalPjesLimit > 0 && totalPjesUsed >= totalPjesLimit * 0.75) || (opsLimit > 0 && opsUsed >= opsLimit * 0.75);
+
+                     if (isCritical) {
+                       return (
+                         <div className="flex items-center gap-2 mt-1">
+                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            <p className="text-xs font-black text-red-600 uppercase tracking-tighter">CRÍTICO: SALDO ZERADO</p>
+                         </div>
+                       );
+                     } else if (isWarning) {
+                       return (
+                         <div className="flex items-center gap-2 mt-1">
+                            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            <p className="text-xs font-black text-amber-600 uppercase tracking-tighter">ATENÇÃO: SALDO BAIXO</p>
+                         </div>
+                       );
+                     } else {
+                       return (
+                         <div className="flex items-center gap-2 mt-1">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <p className="text-xs font-black text-emerald-600 uppercase tracking-tighter">SALDO SAUDÁVEL</p>
+                         </div>
+                       );
+                     }
+                   })()}
                 </div>
              </div>
           </div>

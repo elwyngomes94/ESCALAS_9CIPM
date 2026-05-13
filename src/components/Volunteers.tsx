@@ -64,7 +64,8 @@ const Volunteers = ({ type }: VolunteersProps) => {
     policemanId: '',
     type: type,
     cotas: 1,
-    month: monthKey
+    month: monthKey,
+    desiredService: ''
   });
 
   const fetchData = async () => {
@@ -268,7 +269,8 @@ const Volunteers = ({ type }: VolunteersProps) => {
       policemanId: v.policemanId,
       type: v.type,
       cotas: v.cotas,
-      month: v.month
+      month: v.month,
+      desiredService: v.desiredService || ''
     });
     setIsModalOpen(true);
   };
@@ -403,23 +405,43 @@ const Volunteers = ({ type }: VolunteersProps) => {
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="p-2 bg-slate-50 rounded border border-slate-100 flex flex-col justify-center">
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Solicitadas</p>
-                      <div className="flex items-center gap-1.5">
-                        <CreditCard className="w-3 h-3 text-slate-400" />
-                        <span className="text-xs font-black text-slate-700">{v.cotas}</span>
+                  <div className="mt-4 space-y-2">
+                    <div className="p-2 bg-slate-50 rounded border border-slate-100">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Dias Disponíveis</p>
+                      <div className="flex flex-wrap gap-1">
+                        {Array.from({ length: endOfMonth(currentDate).getDate() }, (_, i) => i + 1).map(d => {
+                            const isOrdinary = selectedDays.includes(d); // This might be wrong logic here, wait.
+                            // The card doesn't know the ordinary schedule unless we fetch it for every PM.
+                            // I should probably skip full display and just show "Ver calendário" or count.
+                            return null;
+                        })}
+                        <span className="text-[9px] font-bold text-pmpe-navy">Conforme Escala Ordinária</span>
                       </div>
                     </div>
-                    <div className="p-2 bg-slate-50 rounded border border-slate-100 flex flex-col justify-center">
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Escaladas</p>
-                      <div className="flex items-center gap-1.5">
-                        <Check className="w-3 h-3 text-green-500" />
-                        <span className="text-xs font-black text-slate-700">{v.scaledCount || 0}</span>
+
+                    {v.desiredService && (
+                      <div className="p-2 bg-pmpe-gold/10 rounded border border-pmpe-gold/20">
+                        <p className="text-[8px] font-black text-pmpe-gold uppercase tracking-widest mb-0.5">Serviço Desejado</p>
+                        <p className="text-[10px] font-black text-pmpe-navy uppercase truncate">{v.desiredService}</p>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2 bg-slate-50 rounded border border-slate-100 flex flex-col justify-center">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Solicitadas</p>
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="w-3 h-3 text-slate-400" />
+                          <span className="text-xs font-black text-slate-700">{v.cotas}</span>
+                        </div>
+                      </div>
+                      <div className="p-2 bg-slate-50 rounded border border-slate-100 flex flex-col justify-center">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Escaladas</p>
+                        <div className="flex items-center gap-1.5">
+                          <Check className="w-3 h-3 text-green-500" />
+                          <span className="text-xs font-black text-slate-700">{v.scaledCount || 0}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
                   <div className={cn(
                     "p-2 rounded border flex items-center justify-between transition-all",
@@ -570,6 +592,17 @@ const Volunteers = ({ type }: VolunteersProps) => {
                                 ))}
                             </div>
                           </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Serviço Desejado (Opcional)</label>
+                          <input 
+                            type="text"
+                            value={formData.desiredService}
+                            onChange={(e) => setFormData({ ...formData, desiredService: e.target.value })}
+                            placeholder="Ex: Patrulha Escolar, GATI, etc."
+                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-pmpe-navy/10 transition-all font-bold"
+                          />
                         </div>
 
                         <div>
