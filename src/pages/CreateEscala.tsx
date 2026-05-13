@@ -62,6 +62,7 @@ const CreateEscala = () => {
   const [success, setSuccess] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
   
   const [assignmentModal, setAssignmentModal] = useState<{
     policemanId: string;
@@ -268,7 +269,8 @@ const CreateEscala = () => {
 
   const filteredVolunteers = volunteers.filter(v => {
     const matchesSearch = !searchTerm || v.policeman?.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || v.policeman?.matricula.includes(searchTerm);
-    return matchesSearch;
+    const matchesTab = v.type === activeTab;
+    return matchesSearch && matchesTab;
   });
 
   const totalPjesLimit = (unitQuotas?.pjesMPTotal || 0) + (unitQuotas?.pjesForumTotal || 0) + (unitQuotas?.pjesEscolarTotal || 0) + (unitQuotas?.pjesDecretoTotal || 0);
@@ -311,8 +313,30 @@ const CreateEscala = () => {
                 placeholder="Pesquisar Policial na Matriz..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-[10px] font-black outline-none focus:ring-4 focus:ring-pmpe-navy/5 w-80 transition-all uppercase tracking-widest"
+                className="pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-[10px] font-black outline-none focus:ring-4 focus:ring-pmpe-navy/5 w-60 transition-all uppercase tracking-widest"
               />
+           </div>
+
+           {/* Tab Switcher */}
+           <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+              <button 
+                onClick={() => setActiveTab('PJES')}
+                className={cn(
+                  "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                  activeTab === 'PJES' ? "bg-white text-pmpe-navy shadow-sm" : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                PJES
+              </button>
+              <button 
+                onClick={() => setActiveTab('OPS')}
+                className={cn(
+                  "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                  activeTab === 'OPS' ? "bg-white text-pmpe-navy shadow-sm" : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                OPS
+              </button>
            </div>
         </div>
 
@@ -346,8 +370,8 @@ const CreateEscala = () => {
                  <Users className="w-5 h-5" />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Efetivo Voluntário</p>
-                 <p className="text-lg font-black text-pmpe-navy">{volunteers.length}</p>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Efetivo {activeTab}</p>
+                 <p className="text-lg font-black text-pmpe-navy">{filteredVolunteers.length}</p>
               </div>
            </div>
            <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-4">
@@ -355,8 +379,10 @@ const CreateEscala = () => {
                  <CheckCircle2 className="w-5 h-5" />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Total de Escalas</p>
-                 <p className="text-lg font-black text-pmpe-navy">{allEscalasOfMonth.length}</p>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Escalas {activeTab}</p>
+                 <p className="text-lg font-black text-pmpe-navy">
+                    {allEscalasOfMonth.filter(e => e.service?.tipo === activeTab).length}
+                 </p>
               </div>
            </div>
            <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-4">
@@ -364,8 +390,11 @@ const CreateEscala = () => {
                  <Zap className="w-5 h-5" />
               </div>
               <div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">PJES Consumido</p>
-                 <p className="text-lg font-black text-pmpe-navy font-mono">{totalPjesUsed} <span className="text-xs text-slate-300">/ {totalPjesLimit}</span></p>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">{activeTab} Consumido</p>
+                 <p className="text-lg font-black text-pmpe-navy font-mono">
+                    {activeTab === 'PJES' ? totalPjesUsed : currentUsage.OPS} 
+                    <span className="text-xs text-slate-300"> / {activeTab === 'PJES' ? totalPjesLimit : unitQuotas?.opsTotal}</span>
+                 </p>
               </div>
            </div>
            <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center gap-4">
@@ -374,7 +403,9 @@ const CreateEscala = () => {
               </div>
               <div>
                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Cotas Disponíveis</p>
-                 <p className="text-lg font-black text-pmpe-navy font-mono">{totalPjesLimit - totalPjesUsed}</p>
+                 <p className="text-lg font-black text-pmpe-navy font-mono">
+                    {activeTab === 'PJES' ? (totalPjesLimit - totalPjesUsed) : ((unitQuotas?.opsTotal || 0) - currentUsage.OPS)}
+                 </p>
               </div>
            </div>
         </div>
@@ -615,7 +646,8 @@ const CreateEscala = () => {
                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
                            const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
                            const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
-                           return isActiveDay && !isAlreadyIn;
+                           const isCorrectType = s.tipo === activeTab;
+                           return isActiveDay && !isAlreadyIn && isCorrectType;
                         }).map(s => {
                            const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date));
                            const pToday = escToday?.policemenIds.length || 0;
