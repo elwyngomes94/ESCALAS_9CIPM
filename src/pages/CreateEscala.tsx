@@ -213,7 +213,6 @@ const CreateEscala = () => {
     if (!service) return;
 
     const dateStr = format(date, 'yyyy-MM-dd');
-    const needed = service.cotasPorServico || 1;
     
     // 1. Strict Duplication Check (Check ALL scales for this person on this day)
     const typeBeingAssigned = service.tipo; // 'PJES' or 'OPS'
@@ -306,8 +305,8 @@ const CreateEscala = () => {
       setTimeout(() => setSuccess(false), 2000);
       // No need for fetchData() as onSnapshot handles it
     } catch (err) {
-      console.error("Scale assignment error:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'escalas/quotaLogs');
+      console.error(err);
+      alert('Erro ao salvar escala. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -638,13 +637,6 @@ const CreateEscala = () => {
                           const scales = scaledPMRecords.filter(e => isSameDay(e.date.toDate(), date));
                           const currentSelectedService = selectedServiceId ? services.find(s => s.id === selectedServiceId) : null;
                           const dateStr = format(date, 'yyyy-MM-dd');
-
-                          // Vacancy check for the selected service on this specific date
-                          const escalaToday = allEscalasOfMonth.find(e => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
-                          const slotsUsed = escalaToday?.policemenIds.length || 0;
-                          const slotsMax = currentSelectedService?.vagasNecessarias || 0;
-                          const isFull = slotsMax > 0 && slotsUsed >= slotsMax;
-
                           const isServiceActiveOnThisDay = currentSelectedService ? (
                              currentSelectedService.activationType === 'ALL' || 
                              (currentSelectedService.activeDates || []).includes(dateStr)
@@ -692,15 +684,6 @@ const CreateEscala = () => {
                                     return;
                                   }
 
-                                  // Vacancy Check for drop
-                                  const scaleToday = allEscalasOfMonth.find(e => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
-                                  const used = scaleToday?.policemenIds.length || 0;
-                                  const max = ds.vagasNecessarias || 0;
-                                  if (max > 0 && used >= max) {
-                                    alert(`Este serviço (${ds.sigla}) já atingiu o limite de vagas para este dia.`);
-                                    return;
-                                  }
-
                                   handleAssignService(draggedServiceId, { 
                                     policemanId: v.policemanId, 
                                     date 
@@ -712,11 +695,6 @@ const CreateEscala = () => {
                                 if (selectedServiceId) {
                                   if (!isServiceActiveOnThisDay) {
                                     alert('Este serviço não está configurado para estar ativo nesta data.');
-                                    return;
-                                  }
-
-                                  if (isFull) {
-                                    alert('Todas as vagas para este serviço já foram preenchidas nesta data.');
                                     return;
                                   }
                                   
@@ -742,11 +720,7 @@ const CreateEscala = () => {
                                 "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-12 w-12",
                                 !isOrd ? "cursor-pointer" : "bg-slate-800",
                                 scales.length === 0 && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
-                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? (
-                                  isFull 
-                                    ? "bg-rose-50/70 ring-inset ring-2 ring-rose-500/30 cursor-not-allowed opacity-60" 
-                                    : "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10"
-                                ) : "",
+                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10" : "",
                                 isSubmittingThisCell ? "bg-amber-100" : ""
                               )}
                             >
@@ -788,11 +762,6 @@ const CreateEscala = () => {
                                     </div>
                                   ) : isOrd ? (
                                     <span className="text-white/30 text-[7px] font-black">ORD</span>
-                                  ) : isFull && selectedServiceId ? (
-                                    <div className="w-full h-full flex flex-col items-center justify-center bg-rose-50/50">
-                                      <span className="text-[7px] text-rose-500 font-black leading-none mb-0.5">LOTADO</span>
-                                      <span className="text-[9px] font-black text-rose-600">{slotsUsed}/{slotsMax}</span>
-                                    </div>
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center group-matrix-cell">
                                        <span className={cn(
