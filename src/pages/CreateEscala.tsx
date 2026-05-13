@@ -231,7 +231,17 @@ const CreateEscala = () => {
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
 
-    const needed = service.cotasPorServico || 1;
+    const finalEscalaId = existingEscala?.id || '';
+    
+    // 3. Vacancy Check (vagasNecessarias)
+    const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
+    const maxSlots = service.vagasNecessarias || 999; // Default to large number if not set
+
+    if (currentSlotsUsed >= maxSlots) {
+      alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
+      return;
+    }
+
     const type = service.tipo as 'PJES' | 'OPS';
     
     // Quota Checks
@@ -726,10 +736,22 @@ const CreateEscala = () => {
                                           key={s.id || idx}
                                           initial={{ scale: 0.8, opacity: 0 }} 
                                           animate={{ scale: 1, opacity: 1 }}
-                                          className="flex-1 flex items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0"
+                                          className="flex-1 flex flex-col items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0 py-0.5"
                                           style={{ backgroundColor: s.service?.color || '#334155' }}
                                         >
-                                          {s.service?.sigla || 'ESC'}
+                                          <div className="flex items-center gap-1">
+                                            <span>{s.service?.sigla || 'ESC'}</span>
+                                            {s.service?.vagasNecessarias && (
+                                              <span className="text-[7px] bg-black/20 px-1 rounded">
+                                                {s.policemenIds.length}/{s.service.vagasNecessarias}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {s.service?.vagasNecessarias && s.policemenIds.length >= s.service.vagasNecessarias && (
+                                            <div className="absolute top-0 right-0 p-0.5">
+                                              <Check className="w-2 h-2 text-emerald-400" />
+                                            </div>
+                                          )}
                                         </motion.div>
                                       ))}
                                       {isSubmittingThisCell && (
