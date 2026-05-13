@@ -144,8 +144,8 @@ const CreateEscala = () => {
         setVolunteers(snap.docs.map(d => ({ 
           id: d.id, 
           ...d.data(),
-          policeman: policemen[d.data().policemanId]
-        } as any)));
+          policeman: policemen[d.data().policemanId] // Note: policemen might be empty on first run, but filteredVolunteers uses it via useMemo anyway
+        } as Volunteer)));
       }
     );
 
@@ -231,20 +231,18 @@ const CreateEscala = () => {
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
 
-    const finalEscalaId = existingEscala?.id || '';
-    
-    // 3. Vacancy Check (vagasNecessarias)
-    const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
-    const maxSlots = service.vagasNecessarias || 999; // Default to large number if not set
-
-    if (currentSlotsUsed >= maxSlots) {
-      alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
-      return;
-    }
-
+    const needed = service.cotasPorServico || 1;
     const type = service.tipo as 'PJES' | 'OPS';
     
-    // Quota Checks
+    // 2. Quota Checks
+    if (service.quotaMensalLimit && service.quotaMensalLimit > 0) {
+        const usedByThisService = serviceSpecificUsage[serviceId] || 0;
+        if (usedByThisService + needed > service.quotaMensalLimit) {
+          alert(`Erro: Limite de cota mensal para o serviço ${service.sigla} atingido (${usedByThisService}/${service.quotaMensalLimit}).`);
+          return;
+        }
+    }
+
     let limit = 0;
     let used = 0;
     if (type === 'OPS') { limit = unitQuotas?.opsTotal || 0; used = currentUsage.OPS; }
@@ -736,22 +734,10 @@ const CreateEscala = () => {
                                           key={s.id || idx}
                                           initial={{ scale: 0.8, opacity: 0 }} 
                                           animate={{ scale: 1, opacity: 1 }}
-                                          className="flex-1 flex flex-col items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0 py-0.5"
+                                          className="flex-1 flex items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0"
                                           style={{ backgroundColor: s.service?.color || '#334155' }}
                                         >
-                                          <div className="flex items-center gap-1">
-                                            <span>{s.service?.sigla || 'ESC'}</span>
-                                            {s.service?.vagasNecessarias && (
-                                              <span className="text-[7px] bg-black/20 px-1 rounded">
-                                                {s.policemenIds.length}/{s.service.vagasNecessarias}
-                                              </span>
-                                            )}
-                                          </div>
-                                          {s.service?.vagasNecessarias && s.policemenIds.length >= s.service.vagasNecessarias && (
-                                            <div className="absolute top-0 right-0 p-0.5">
-                                              <Check className="w-2 h-2 text-emerald-400" />
-                                            </div>
-                                          )}
+                                          {s.service?.sigla || 'ESC'}
                                         </motion.div>
                                       ))}
                                       {isSubmittingThisCell && (
@@ -886,9 +872,17 @@ const CreateEscala = () => {
                           <div className="flex-1 min-w-0">
                              <div className="flex items-center justify-between gap-2 overflow-hidden">
                                 <p className={cn(
-                                   "text-[10px] font-black uppercase leading-tight truncate",
+                                   "text-[9px] font-black uppercase leading-tight truncate",
                                    selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
                                 )}>{s.nome}</p>
+                                {s.quotaMensalLimit ? (
+                                   <span className={cn(
+                                      "text-[7px] font-black px-1.5 py-0.5 rounded shrink-0",
+                                      selectedServiceId === s.id ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                   )}>
+                                      {(s.quotaMensalLimit || 0) - (serviceSpecificUsage[s.id!] || 0)} DISP.
+                                   </span>
+                                ) : null}
                              </div>
                              <div className="flex items-center gap-2 mt-1">
                                 <span className={cn(

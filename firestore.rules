@@ -56,12 +56,8 @@ service cloud.firestore {
              d.cidade is string && d.cidade.size() <= 100 &&
              d.horarioInicio is string &&
              d.horarioTermino is string &&
-             d.cotasPorServico is number &&
+             d.cotasPorEscala is number &&
              d.isActive is bool &&
-             d.sigla is string && d.sigla.size() <= 10 &&
-             d.month is string &&
-             d.activationType in ['ALL', 'SPECIFIC'] &&
-             d.activeDates is list &&
              (d.observacoes == null || d.observacoes is string);
     }
 
@@ -75,10 +71,7 @@ service cloud.firestore {
 
     function isValidQuotaSettings(d) {
       return d.month is string &&
-             d.pjesMPTotal is number &&
-             d.pjesForumTotal is number &&
-             d.pjesEscolarTotal is number &&
-             d.pjesDecretoTotal is number &&
+             d.pjesTotal is number &&
              d.opsTotal is number;
     }
 
