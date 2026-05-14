@@ -305,7 +305,7 @@ const CreateEscala = () => {
       // No need for fetchData() as onSnapshot handles it
     } catch (err) {
       console.error(err);
-      alert('Erro ao salvar escala. Tente novamente.');
+      handleFirestoreError(err, OperationType.WRITE, 'escalas');
     } finally {
       setSubmitting(false);
     }
@@ -343,6 +343,7 @@ const CreateEscala = () => {
       setAssignmentModal(null);
     } catch (err) {
       console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, 'escalas');
     } finally {
       setLoading(false);
     }

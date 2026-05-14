@@ -42,32 +42,31 @@ service cloud.firestore {
 
     // Validation Helpers
     function isValidPoliceman(d) {
-      return d.nomeCompleto is string && d.nomeCompleto.size() <= 200 &&
-             d.nomeGuerra is string && d.nomeGuerra.size() <= 50 &&
-             d.graduacaoPosto is string && d.graduacaoPosto.size() <= 50 &&
-             d.matricula is string && d.matricula.size() <= 20 &&
-             d.telefone is string && d.telefone.size() <= 20 &&
-             d.situacao is string && d.situacao.size() <= 50;
+      return d.nomeCompleto is string && 
+             d.nomeGuerra is string && 
+             d.graduacaoPosto is string && 
+             d.matricula is string && 
+             d.telefone is string && 
+             d.situacao is string;
     }
 
     function isValidServiceType(d) {
-      return d.nome is string && d.nome.size() <= 100 &&
-             d.tipo in ['PJES', 'OPS', 'ORDINARIO', 'EXTRA'] &&
-             d.cidade is string && d.cidade.size() <= 100 &&
+      return d.nome is string && 
+             d.tipo is string &&
+             d.cidade is string && 
              d.horarioInicio is string &&
              d.horarioTermino is string &&
              d.cotasPorServico is number &&
              d.isActive is bool &&
-             d.sigla is string && d.sigla.size() <= 10 &&
+             d.sigla is string && 
              d.month is string &&
-             d.activationType in ['ALL', 'SPECIFIC'] &&
-             d.activeDates is list &&
-             (d.observacoes == null || d.observacoes is string);
+             d.activationType is string &&
+             d.activeDates is list;
     }
 
     function isValidQuotaLog(d) {
-      return isValidId(d.serviceTypeId) &&
-             d.tipo in ['PJES', 'OPS'] &&
+      return d.serviceTypeId is string &&
+             d.tipo is string &&
              d.quantidade is number &&
              d.usuarioUid is string &&
              d.month is string;
@@ -83,16 +82,15 @@ service cloud.firestore {
     }
 
     function isValidVolunteer(d) {
-      return isValidId(d.policemanId) &&
-             d.type in ['PJES', 'OPS'] &&
-             d.cotas is number && d.cotas >= 1 && d.cotas <= 12;
+      return d.policemanId is string &&
+             d.type is string &&
+             d.cotas is number;
     }
 
     function isValidEscala(d) {
-      return isValidId(d.serviceTypeId) &&
-             d.policemenIds is list && d.policemenIds.size() > 0 &&
-             d.date is timestamp &&
-             (d.observations == null || d.observations is string);
+      return d.serviceTypeId is string &&
+             d.policemenIds is list && 
+             d.date is timestamp;
     }
 
     // Rules
