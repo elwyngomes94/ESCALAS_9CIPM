@@ -10,7 +10,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Policeman, OrdinarySchedule, Volunteer } from '../types';
+import { Policeman, OrdinarySchedule, Volunteer, Escala, ServiceType } from '../types';
 import { 
   Calendar as CalendarIcon, 
   Search, 
@@ -19,9 +19,10 @@ import {
   Info,
   CheckCircle2,
   AlertCircle,
-  UserCheck
+  UserCheck,
+  ShieldAlert
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType, cn } from '../lib/utils';
@@ -32,6 +33,8 @@ const OrdinaryService = () => {
   const [policemen, setPolicemen] = useState<Policeman[]>([]);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
   const [schedules, setSchedules] = useState<Record<string, number[]>>({});
+  const [escalas, setEscalas] = useState<Escala[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<Record<string, ServiceType>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [filterVolunteers, setFilterVolunteers] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -75,6 +78,26 @@ const OrdinaryService = () => {
         sMap[data.policemanId] = data.days || [];
       });
       setSchedules(sMap);
+
+      // Fetch service types to know the tipo (PJES/OPS)
+      const stSnapshot = await getDocs(query(collection(db, 'serviceTypes'), where('month', '==', monthKey)));
+      const stMap: Record<string, ServiceType> = {};
+      stSnapshot.docs.forEach(d => {
+        stMap[d.id] = { id: d.id, ...d.data() } as ServiceType;
+      });
+      setServiceTypes(stMap);
+
+      // Fetch escalas for this month
+      // Escalas use date (timestamp). We need to filter by range.
+      const start = startOfMonth(currentDate);
+      const end = endOfMonth(currentDate);
+      const eSnapshot = await getDocs(query(
+        collection(db, 'escalas'),
+        where('date', '>=', start),
+        where('date', '<=', end)
+      ));
+      const eList = eSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Escala));
+      setEscalas(eList);
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, 'multiple');
     } finally {
@@ -181,14 +204,26 @@ const OrdinaryService = () => {
         <div className="text-[11px] text-blue-800 leading-relaxed">
           <p className="font-bold uppercase tracking-tight mb-1">Por que definir o serviço ordinário?</p>
           <p>Ao definir os dias de serviço regular, o sistema impedirá que este policial seja selecionado para escalas extras (GJ) nestes mesmos dias, garantindo o tempo de descanso e evitando erros operacionais.</p>
-          <div className="flex gap-4 mt-2">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mt-2">
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="font-bold">Voluntário PJES</span>
+              <span className="w-2.5 h-2.5 rounded bg-pmpe-red" />
+              <span className="font-bold">Ordinário</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
-              <span className="font-bold">Voluntário OPS</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              <span className="font-bold">Escala PJES</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+              <span className="font-bold">Escala OPS</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="font-bold">Vol. PJES</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span className="font-bold">Vol. OPS</span>
             </div>
           </div>
         </div>
@@ -266,22 +301,44 @@ const OrdinaryService = () => {
                     {daysInMonth.map(day => {
                       const d = getDate(day);
                       const isSelected = (schedules[p.id!] || []).includes(d);
+                      
+                      // Check for PJES/OPS scales
+                      const scaledExteriors = escalas.filter(e => 
+                        isSameDay(e.date.toDate(), day) && 
+                        e.policemenIds.includes(p.id!)
+                      );
+
+                      const hasPJES = scaledExteriors.some(e => serviceTypes[e.serviceTypeId]?.tipo === 'PJES');
+                      const hasOPS = scaledExteriors.some(e => serviceTypes[e.serviceTypeId]?.tipo === 'OPS');
+
                       return (
                         <td 
                           key={d} 
                           className="p-1 border-r border-slate-100 last:border-r-0 text-center"
                         >
-                          <button
-                            onClick={() => toggleDay(p.id!, d)}
-                            className={cn(
-                              "w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold transition-all",
-                              isSelected 
-                                ? "bg-pmpe-red text-white shadow-md shadow-pmpe-red/30 scale-110" 
-                                : "text-slate-300 hover:bg-slate-200/50"
-                            )}
-                          >
-                            {isSelected ? <CheckCircle2 className="w-3 h-3" /> : d}
-                          </button>
+                          <div className="relative inline-block">
+                            <button
+                              onClick={() => toggleDay(p.id!, d)}
+                              className={cn(
+                                "w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold transition-all",
+                                isSelected 
+                                  ? "bg-pmpe-red text-white shadow-md shadow-pmpe-red/30 scale-110" 
+                                  : "text-slate-300 hover:bg-slate-200/50"
+                              )}
+                            >
+                              {isSelected ? <CheckCircle2 className="w-3 h-3" /> : d}
+                            </button>
+                            
+                            {/* Indicators for PJES/OPS */}
+                            <div className="absolute -top-1 -right-1 flex flex-col gap-0.5">
+                              {hasPJES && (
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 border border-white" title="PJES" />
+                              )}
+                              {hasOPS && (
+                                <div className="w-2 h-2 rounded-full bg-blue-500 border border-white" title="OPS" />
+                              )}
+                            </div>
+                          </div>
                         </td>
                       );
                     })}
