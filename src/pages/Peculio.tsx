@@ -148,7 +148,7 @@ const Peculio = () => {
       });
       fetchData();
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'policemen');
+      console.error("Erro ao salvar policial:", err);
     }
   };
 
@@ -187,7 +187,7 @@ const Peculio = () => {
       setAiPreviewData([]);
       fetchData();
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'policemen');
+      console.error("Erro ao importar policiais:", err);
     } finally {
       setAiProcessing(false);
     }
@@ -200,7 +200,7 @@ const Peculio = () => {
       // Optimistic update
       setPolicemen(prev => prev.filter(p => p.id !== id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'policemen');
+      console.error("Erro ao excluir policial:", err);
     }
   };
 

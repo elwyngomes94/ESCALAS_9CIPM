@@ -95,52 +95,35 @@ service cloud.firestore {
 
     // Rules
     match /users/{userId} {
-      allow read: if true;
-      allow create: if isSignedIn() && request.auth.uid == userId && 
-                     incoming().email == currentEmail() && 
-                     incoming().isAdmin == (currentEmail() == 'elwyn.gomes94@gmail.com');
-      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId && 
-                    incoming().diff(existing()).affectedKeys().hasOnly(['email']) );
+      allow read, write: if true;
     }
 
     match /policemen/{policemanId} {
-      allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(policemanId) && 
-                                    (request.method == 'delete' || isValidPoliceman(incoming()));
+      allow read, write: if true;
     }
 
     match /serviceTypes/{serviceTypeId} {
-      allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(serviceTypeId) &&
-                                    (request.method == 'delete' || isValidServiceType(incoming()));
+      allow read, write: if true;
     }
 
     match /volunteers/{volunteerId} {
-      allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(volunteerId) &&
-                                    (request.method == 'delete' || isValidVolunteer(incoming()));
+      allow read, write: if true;
     }
 
     match /escalas/{escalaId} {
-      allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(escalaId) &&
-                                    (request.method == 'delete' || isValidEscala(incoming()));
+      allow read, write: if true;
     }
 
     match /ordinarySchedules/{scheduleId} {
-      allow read: if true;
-      allow create, update, delete: if (isAdmin() || true) && isValidId(scheduleId);
+      allow read, write: if true;
     }
 
     match /quotaSettings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin() && isValidId(settingId) && isValidQuotaSettings(incoming());
+      allow read, write: if true;
     }
 
     match /quotaLogs/{logId} {
-      allow read: if true;
-      allow create: if isSignedIn() && isValidId(logId) && isValidQuotaLog(incoming());
-      allow update, delete: if isAdmin();
+      allow read, write: if true;
     }
   }
 }

@@ -133,8 +133,7 @@ const ServiceTypes = () => {
       });
       fetchData();
     } catch (err) {
-      console.error("Error saving service type:", err);
-      handleFirestoreError(err, OperationType.WRITE, 'serviceTypes');
+      console.error("Erro ao salvar modalidade:", err);
     } finally {
       setSaving(false);
     }
@@ -147,7 +146,7 @@ const ServiceTypes = () => {
       // Optimistic update
       setServices(prev => prev.filter(s => s.id !== id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'serviceTypes');
+      console.error("Erro ao excluir modalidade:", err);
     }
   };
 
