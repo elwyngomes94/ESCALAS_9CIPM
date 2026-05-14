@@ -65,7 +65,14 @@ const CreateEscala = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
-  
+
+  const mKey = format(currentMonth, 'yyyy-MM');
+
+  const [serviceSearchTerm, setServiceSearchTerm] = useState('');
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [unitQuotas, setUnitQuotas] = useState<QuotaSettings | null>(null);
+  const [currentUsage, setCurrentUsage] = useState({ PJES_MP: 0, PJES_FORUM: 0, PJES_ESCOLAR: 0, PJES_DECRETO: 0, OPS: 0 });
+  const [serviceSpecificUsage, setServiceSpecificUsage] = useState<Record<string, number>>({});
   const [assignmentModal, setAssignmentModal] = useState<{
     policemanId: string;
     policemanName: string;
@@ -73,20 +80,20 @@ const CreateEscala = () => {
     date: Date;
   } | null>(null);
 
-  const [unitQuotas, setUnitQuotas] = useState<QuotaSettings | null>(null);
-  const [currentUsage, setCurrentUsage] = useState({
-    PJES_MP: 0,
-    PJES_FORUM: 0,
-    PJES_ESCOLAR: 0,
-    PJES_DECRETO: 0,
-    OPS: 0
-  });
-  const [serviceSpecificUsage, setServiceSpecificUsage] = useState<Record<string, number>>({});
+  // Joins computed via useMemo to avoid stale data in closures and redundant state
+  const joinedVolunteers = useMemo(() => {
+    return volunteers.map(v => ({
+      ...v,
+      policeman: policemen[v.policemanId]
+    }));
+  }, [volunteers, policemen]);
 
-  const mKey = format(currentMonth, 'yyyy-MM');
-
-  const [serviceSearchTerm, setServiceSearchTerm] = useState('');
-  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const joinedEscalas = useMemo(() => {
+    return allEscalasOfMonth.map(e => ({
+      ...e,
+      service: services.find(s => s.id === e.serviceTypeId)
+    }));
+  }, [allEscalasOfMonth, services]);
 
   useEffect(() => {
     // 1. Initial Static Data (Services, Policemen, Quotas)
@@ -144,8 +151,7 @@ const CreateEscala = () => {
         setVolunteers(snap.docs.map(d => ({ 
           id: d.id, 
           ...d.data(),
-          policeman: policemen[d.data().policemanId]
-        } as any)));
+        } as Volunteer)));
       }
     );
 
@@ -156,16 +162,10 @@ const CreateEscala = () => {
         where('date', '<=', Timestamp.fromDate(end))
       ),
       (snap) => {
-        const eData = snap.docs.map(d => {
-          const data = d.data() as Escala;
-          return {
-            id: d.id,
-            ...data,
-            // services state is updated by static fetch above
-            service: services.find(s => s.id === data.serviceTypeId)
-          };
-        });
-        setAllEscalasOfMonth(eData);
+        setAllEscalasOfMonth(snap.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        } as Escala)));
         setLoading(false);
       }
     );
@@ -199,7 +199,7 @@ const CreateEscala = () => {
       unsubEscalas();
       unsubLogs();
     };
-  }, [currentMonth, mKey, services.length]); // Added services.length to re-run map in snap if services arrive
+  }, [currentMonth, mKey]); 
 
 
   const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }) => {
@@ -217,7 +217,7 @@ const CreateEscala = () => {
     
     // 1. Strict Duplication Check (Check ALL scales for this person on this day)
     const typeBeingAssigned = service.tipo; // 'PJES' or 'OPS'
-    const alreadyScaledInSameType = allEscalasOfMonth.find(e => 
+    const alreadyScaledInSameType = joinedEscalas.find(e => 
       format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
       e.policemenIds.includes(policemanId) &&
       e.service?.tipo === typeBeingAssigned
@@ -228,17 +228,15 @@ const CreateEscala = () => {
        return;
     }
 
-    const existingEscala = allEscalasOfMonth.find(e => 
+    const existingEscala = joinedEscalas.find(e => 
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
 
-    const finalEscalaId = existingEscala?.id || '';
-    
     // 3. Vacancy Check (vagasNecessarias)
     const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
-    const maxSlots = service.vagasNecessarias || 999; // Default to large number if not set
+    const maxSlots = service.vagasNecessarias || 0; 
 
-    if (currentSlotsUsed >= maxSlots) {
+    if (maxSlots > 0 && currentSlotsUsed >= maxSlots) {
       alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
       return;
     }
@@ -264,7 +262,7 @@ const CreateEscala = () => {
 
     setSubmitting(true);
     try {
-      let finalEscalaId = '';
+      let finalEscalaIdValue = '';
       if (existingEscala) {
         // Double check policemenIds to prevent race condition
         if (!existingEscala.policemenIds.includes(policemanId)) {
@@ -273,7 +271,7 @@ const CreateEscala = () => {
             updatedAt: serverTimestamp()
           });
         }
-        finalEscalaId = existingEscala.id!;
+        finalEscalaIdValue = existingEscala.id!;
       } else {
         const docRef = await addDoc(collection(db, 'escalas'), {
           serviceTypeId: serviceId,
@@ -282,13 +280,13 @@ const CreateEscala = () => {
           observations: '',
           createdAt: serverTimestamp()
         });
-        finalEscalaId = docRef.id;
+        finalEscalaIdValue = docRef.id;
       }
       
       await addDoc(collection(db, 'quotaLogs'), {
         serviceTypeId: serviceId,
         serviceName: service.nome,
-        escalaId: finalEscalaId,
+        escalaId: finalEscalaIdValue,
         tipo: service.tipo,
         pjesSubtype: service.pjesSubtype,
         quantidade: needed,
@@ -315,7 +313,7 @@ const CreateEscala = () => {
 
   const handleRemoveFromScale = async (escalaId: string, policemanId: string) => {
     if (!isAdmin) return;
-    const escala = allEscalasOfMonth.find(e => e.id === escalaId);
+    const escala = joinedEscalas.find(e => e.id === escalaId);
     if (!escala) return;
 
     setLoading(true);
@@ -359,14 +357,14 @@ const CreateEscala = () => {
     // 1. Group all possible volunteers and scaled people
     // We want unique policemanId per row
     const pIds = new Set<string>();
-    volunteers.forEach(v => pIds.add(v.policemanId));
-    allEscalasOfMonth.forEach(e => e.policemenIds.forEach(id => pIds.add(id)));
+    joinedVolunteers.forEach(v => pIds.add(v.policemanId));
+    joinedEscalas.forEach(e => e.policemenIds.forEach(id => pIds.add(id)));
 
     const result: (Volunteer & { policeman?: Policeman })[] = [];
 
     pIds.forEach(pid => {
-      const pVolunteers = volunteers.filter(v => v.policemanId === pid);
-      const hasAnyScale = allEscalasOfMonth.some(e => e.policemenIds.includes(pid));
+      const pVolunteers = joinedVolunteers.filter(v => v.policemanId === pid);
+      const hasAnyScale = joinedEscalas.some(e => e.policemenIds.includes(pid));
       
       // Filter logic: person belongs to this tab if:
       // a) They volunteered for this tab's type
@@ -408,7 +406,7 @@ const CreateEscala = () => {
     });
 
     return result;
-  }, [volunteers, allEscalasOfMonth, activeTab, searchTerm, policemen, mKey]);
+  }, [joinedVolunteers, joinedEscalas, activeTab, searchTerm, policemen, mKey]);
 
   const totalPjesLimit = (unitQuotas?.pjesMPTotal || 0) + (unitQuotas?.pjesForumTotal || 0) + (unitQuotas?.pjesEscolarTotal || 0) + (unitQuotas?.pjesDecretoTotal || 0);
   const totalPjesUsed = currentUsage.PJES_MP + currentUsage.PJES_FORUM + currentUsage.PJES_ESCOLAR + currentUsage.PJES_DECRETO;
@@ -523,7 +521,7 @@ const CreateEscala = () => {
                 <div className="relative z-10">
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">Escalados {activeTab}</p>
                    <p className="text-xl font-black text-pmpe-navy">
-                      {allEscalasOfMonth.filter(e => e.service?.tipo === activeTab).length}
+                      {joinedEscalas.filter(e => e.service?.tipo === activeTab).length}
                    </p>
                 </div>
              </div>
@@ -640,7 +638,7 @@ const CreateEscala = () => {
                           const dateStr = format(date, 'yyyy-MM-dd');
 
                           // Vacancy check for the selected service on this specific date
-                          const escalaToday = allEscalasOfMonth.find(e => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
+                          const escalaToday = joinedEscalas.find(e => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
                           const slotsUsed = escalaToday?.policemenIds.length || 0;
                           const slotsMax = currentSelectedService?.vagasNecessarias || 0;
                           const isFull = slotsMax > 0 && slotsUsed >= slotsMax;
@@ -693,7 +691,7 @@ const CreateEscala = () => {
                                   }
 
                                   // Vacancy Check for drop
-                                  const scaleToday = allEscalasOfMonth.find(e => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
+                                  const scaleToday = joinedEscalas.find(e => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
                                   const used = scaleToday?.policemenIds.length || 0;
                                   const max = ds.vagasNecessarias || 0;
                                   if (max > 0 && used >= max) {
@@ -999,7 +997,7 @@ const CreateEscala = () => {
                   
                   {/* Active Scale Info */}
                   {(() => {
-                    const scaled = allEscalasOfMonth.filter(e => 
+                    const scaled = joinedEscalas.filter(e => 
                       isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId)
                     );
                     if (scaled.length > 0) {
@@ -1059,79 +1057,77 @@ const CreateEscala = () => {
                      </div>
 
                      <div className="grid grid-cols-1 gap-3">
-                        {services.filter(s => {
-                           const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
-                           const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
-                           const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
-                           const isCorrectType = s.tipo?.toUpperCase() === activeTab;
-                           const matchesMonth = s.month === mKey;
-                           const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
-                           
-                           return isActiveDay && !isAlreadyIn && isCorrectType && matchesMonth && matchesSearch;
-                        }).length === 0 && (
-                           <div className="p-12 text-center bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
-                              <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                                 <AlertCircle className="w-8 h-8 text-slate-300" />
-                              </div>
-                              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-relaxed px-6">
-                                 Nenhum serviço de {activeTab} disponível para esta data específica. Clique nos serviços ao lado para gerenciar as datas ativas.
-                              </p>
-                           </div>
-                        )}
-                        {services.filter(s => {
-                           const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
-                           const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
-                           const isAlreadyIn = allEscalasOfMonth.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
-                           const isCorrectType = s.tipo?.toUpperCase() === activeTab;
-                           const matchesMonth = s.month === mKey;
-                           const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
-                           
-                           return isActiveDay && !isAlreadyIn && isCorrectType && matchesMonth && matchesSearch;
-                        }).map(s => {
-                           const escToday = allEscalasOfMonth.find(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date));
-                           const pToday = escToday?.policemenIds.length || 0;
-                           const target = s.vagasNecessarias || 0;
-                           const isFull = target > 0 && pToday >= target;
+                        {(() => {
+                          const availableServices = services.filter(s => {
+                            const dStr = format(assignmentModal.date, 'yyyy-MM-dd');
+                            const isActiveDay = s.activationType === 'ALL' || (s.activeDates || []).includes(dStr);
+                            const isAlreadyIn = joinedEscalas.some(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date) && e.policemenIds.includes(assignmentModal.policemanId));
+                            const isCorrectType = s.tipo?.toUpperCase() === activeTab;
+                            const matchesMonth = s.month === mKey;
+                            const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
+                            
+                            return isActiveDay && !isAlreadyIn && isCorrectType && matchesMonth && matchesSearch;
+                          });
 
-                           return (
-                             <button 
-                               key={s.id}
-                               disabled={submitting || isFull}
-                               onClick={() => handleAssignService(s.id!)}
-                               className={cn(
-                                 "p-6 rounded-[32px] flex items-center justify-between group transition-all text-left shadow-lg bg-white border border-slate-100",
-                                 isFull ? "opacity-50 grayscale cursor-not-allowed" : "hover:border-pmpe-navy/30 hover:bg-slate-50 hover:shadow-2xl active:scale-[0.98]"
-                               )}
-                             >
-                                <div className="flex items-center gap-5">
-                                   <div className="w-14 h-14 rounded-[20px] flex items-center justify-center shadow-xl transition-transform group-hover:scale-110" style={{ backgroundColor: s.color + '15', color: s.color, border: `1px solid ${s.color}20` }}>
-                                      <span className="text-xs font-black">{s.sigla}</span>
-                                   </div>
-                                   <div>
-                                      <p className="text-[12px] font-black text-pmpe-navy uppercase leading-tight mb-1">{s.nome}</p>
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
-                                          <Clock className="w-3 h-3" /> {s.horarioInicio} - {s.horarioTermino}
-                                        </div>
-                                        {s.cotasPorServico > 1 && (
-                                          <span className="text-[8px] font-black bg-rose-50 text-rose-500 px-2 py-0.5 rounded-lg border border-rose-100">-{s.cotasPorServico} COTAS</span>
-                                        )}
-                                      </div>
-                                   </div>
+                          if (availableServices.length === 0) {
+                            return (
+                              <div className="p-12 text-center bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
+                                <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                                  <AlertCircle className="w-8 h-8 text-slate-300" />
                                 </div>
-                                <div className="flex flex-col items-end gap-1.5">
-                                   <div className={cn(
-                                     "text-[10px] font-black px-4 py-1.5 rounded-2xl uppercase border flex items-center gap-2 transition-all",
-                                     isFull ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-emerald-50 text-emerald-600 border-emerald-100 group-hover:bg-pmpe-navy group-hover:text-white"
-                                   )}>
-                                      <Users className="w-3 h-3" />
-                                      {pToday}/{target || '∞'}
-                                   </div>
-                                   {isFull && <span className="text-[7px] font-black text-rose-500 uppercase">LOTADO</span>}
-                                </div>
-                             </button>
-                           );
-                        })}
+                                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-relaxed px-6">
+                                  Nenhum serviço de {activeTab} disponível para esta data específica. Clique nos serviços ao lado para gerenciar as datas ativas.
+                                </p>
+                              </div>
+                            );
+                          }
+
+                          return availableServices.map(s => {
+                            const escToday = joinedEscalas.find(e => e.serviceTypeId === s.id && isSameDay(e.date.toDate(), assignmentModal.date));
+                            const pToday = escToday?.policemenIds.length || 0;
+                            const target = s.vagasNecessarias || 0;
+                            const isFull = target > 0 && pToday >= target;
+
+                            return (
+                              <button 
+                                key={s.id}
+                                disabled={submitting || isFull}
+                                onClick={() => handleAssignService(s.id!)}
+                                className={cn(
+                                  "p-6 rounded-[32px] flex items-center justify-between group transition-all text-left shadow-lg bg-white border border-slate-100",
+                                  isFull ? "opacity-50 grayscale cursor-not-allowed" : "hover:border-pmpe-navy/30 hover:bg-slate-50 hover:shadow-2xl active:scale-[0.98]"
+                                )}
+                              >
+                                 <div className="flex items-center gap-5">
+                                    <div className="w-14 h-14 rounded-[20px] flex items-center justify-center shadow-xl transition-transform group-hover:scale-110" style={{ backgroundColor: s.color + '15', color: s.color, border: `1px solid ${s.color}20` }}>
+                                       <span className="text-xs font-black">{s.sigla}</span>
+                                    </div>
+                                    <div>
+                                       <p className="text-[12px] font-black text-pmpe-navy uppercase leading-tight mb-1">{s.nome}</p>
+                                       <div className="flex items-center gap-3">
+                                         <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+                                           <Clock className="w-3 h-3" /> {s.horarioInicio} - {s.horarioTermino}
+                                         </div>
+                                         {(s.cotasPorServico || 1) > 1 && (
+                                           <span className="text-[8px] font-black bg-rose-50 text-rose-500 px-2 py-0.5 rounded-lg border border-rose-100">-{s.cotasPorServico} COTAS</span>
+                                         )}
+                                       </div>
+                                    </div>
+                                 </div>
+                                 <div className="flex flex-col items-end gap-1.5">
+                                    <div className={cn(
+                                      "text-[10px] font-black px-4 py-1.5 rounded-2xl uppercase border flex items-center gap-2 transition-all",
+                                      isFull ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-emerald-50 text-emerald-600 border-emerald-100 group-hover:bg-pmpe-navy group-hover:text-white"
+                                    )}>
+                                       <Users className="w-3 h-3" />
+                                       {pToday}/{target || '∞'}
+                                    </div>
+                                    {isFull && <span className="text-[7px] font-black text-rose-500 uppercase">LOTADO</span>}
+                                 </div>
+                              </button>
+                            );
+                          });
+                        })()}
                      </div>
                   </div>
                </div>
