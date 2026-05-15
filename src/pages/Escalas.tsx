@@ -59,13 +59,14 @@ const Escalas = () => {
   const [escalas, setEscalas] = useState<(Escala & { service?: ServiceType, policemen?: Policeman[] })[]>([]);
   const [services, setServices] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'official'>('list');
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
+  const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   // Report State
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportConfig, setReportConfig] = useState({
-    mode: 'SEI' as 'SEI' | 'MATRIX',
+    mode: 'OFFICIAL' as 'SEI' | 'MATRIX' | 'OFFICIAL',
     scope: 'MONTH' as 'DAY' | 'MONTH' | 'FILTERED',
     serviceTypeId: '',
     date: format(new Date(), 'yyyy-MM-dd')
@@ -74,6 +75,7 @@ const Escalas = () => {
   
   const reportRef = useRef<HTMLDivElement>(null);
   const matrixRef = useRef<HTMLDivElement>(null);
+  const officialRef = useRef<HTMLDivElement>(null);
 
   // Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -358,26 +360,68 @@ const Escalas = () => {
   };
 
   const exportBatchPDF = async () => {
-    const targetRef = reportConfig.mode === 'SEI' ? reportRef : matrixRef;
-    if (!targetRef.current) return;
-    
+    if (reportConfig.mode !== 'OFFICIAL') {
+      const targetRef = reportConfig.mode === 'SEI' ? reportRef : matrixRef;
+      if (!targetRef.current) return;
+      
+      setGeneratingReport(true);
+      try {
+        const canvas = await html2canvas(targetRef.current, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF(reportConfig.mode === 'MATRIX' ? 'l' : 'p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const imgWidth = pageWidth;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.save(`Relatorio_${reportConfig.mode}_${reportConfig.date}.pdf`);
+      } catch (err) {
+        console.error(err);
+        alert('Erro ao gerar PDF');
+      } finally {
+        setGeneratingReport(false);
+      }
+      return;
+    }
+
+    // Official Mode Multi-page
+    if (!officialRef.current) return;
     setGeneratingReport(true);
     try {
-      const canvas = await html2canvas(targetRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF(reportConfig.mode === 'MATRIX' ? 'l' : 'p', 'mm', 'a4');
+      const tables = officialRef.current.querySelectorAll('.official-report-table');
+      if (tables.length === 0) {
+        alert('Nenhuma escala encontrada para gerar o relatório.');
+        setGeneratingReport(false);
+        return;
+      }
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      pdf.save(`Relatorio_${reportConfig.mode}_${reportConfig.date}.pdf`);
+
+      for (let i = 0; i < tables.length; i++) {
+        const table = tables[i] as HTMLElement;
+        const canvas = await html2canvas(table, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = pageWidth - 20; // Margin
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+      }
+
+      pdf.save(`Escalas_Oficiais_${reportConfig.date}.pdf`);
     } catch (err) {
       console.error(err);
       alert('Erro ao gerar PDF');
@@ -454,9 +498,21 @@ const Escalas = () => {
                 <CalendarViewIcon className="w-3.5 h-3.5" />
                 Calendário
               </button>
+              <button
+                onClick={() => setViewMode('official')}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tight transition-all",
+                  viewMode === 'official' 
+                    ? "bg-white text-pmpe-navy shadow-sm" 
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Escala Mensal
+              </button>
             </div>
 
-            {viewMode === 'calendar' && (
+            {(viewMode === 'calendar' || viewMode === 'official') && (
               <div className="flex items-center gap-2 ml-4">
                 <button 
                   onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
@@ -657,6 +713,113 @@ const Escalas = () => {
               </div>
             );
           })}
+        </div>
+      ) : viewMode === 'official' ? (
+        <div className="space-y-8 bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-inner">
+           <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                 <Filter className="w-4 h-4 text-slate-400" />
+                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Filtrar Serviço Para Visualização:</span>
+              </div>
+              <select 
+                value={selectedServiceId}
+                onChange={(e) => setSelectedServiceId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 text-xs font-bold text-pmpe-navy outline-none focus:ring-1 focus:ring-pmpe-navy"
+              >
+                <option value="">TODOS OS SERVIÇOS DO MÊS</option>
+                {services.filter(s => s.month === format(currentMonth, 'yyyy-MM')).map(s => (
+                  <option key={s.id} value={s.id!}>{s.nome} - {s.tipo}</option>
+                ))}
+              </select>
+           </div>
+
+           {(() => {
+              const monthStart = startOfMonth(currentMonth);
+              const monthEnd = endOfMonth(currentMonth);
+              const filteredServices = services.filter(s => {
+                const isCorrectMonth = s.month === format(currentMonth, 'yyyy-MM');
+                const isSelected = selectedServiceId ? s.id === selectedServiceId : true;
+                return isCorrectMonth && isSelected;
+              });
+              
+              if (filteredServices.length === 0) return (
+                <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Nenhum serviço configurado para este mês</p>
+                </div>
+              );
+
+              return filteredServices.map(service => {
+                const serviceScales = escalas.filter(e => 
+                  e.serviceTypeId === service.id && 
+                  e.date.toDate() >= monthStart && e.date.toDate() <= monthEnd
+                );
+                
+                const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+                const rows: any[] = [];
+                monthDays.forEach(day => {
+                  const dayScales = serviceScales.filter(e => isSameDay(e.date.toDate(), day));
+                  if (dayScales.length === 0) {
+                    rows.push({ day: getDate(day), pol: null });
+                  } else {
+                    dayScales.forEach(esc => {
+                      esc.policemen?.forEach(p => {
+                        rows.push({ day: getDate(day), pol: p, esc });
+                      });
+                    });
+                  }
+                });
+
+                const totalCotasValue = rows.reduce((acc, row) => acc + (row.pol ? 1 : 0), 0);
+
+                return (
+                  <div key={service.id} className="bg-white p-1 shadow-xl border border-slate-300 rounded overflow-x-auto">
+                    <div className="min-w-[800px]">
+                        <div className="bg-[#f28c28] text-black font-black text-center py-2 border-2 border-black uppercase text-xs">
+                          ESCALA {service.nome} – 9ª CIPM – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                        </div>
+                        <div className="bg-[#dcdcdc] text-black font-black text-center py-1 border-x-2 border-b-2 border-black uppercase text-[9px]">
+                          LOCAL: {service.cidade} – {service.horarioInicio} AS {service.horarioTermino}
+                        </div>
+                        <table className="w-full border-collapse border-b-2 border-black text-[10px]">
+                          <thead>
+                            <tr className="bg-white font-black uppercase text-center border-x-2 border-black">
+                              <th className="border-r-2 border-black p-1 w-[12%]">GRADUAÇÃO</th>
+                              <th className="border-r-2 border-black p-1 w-[12%]">MATRÍCULA</th>
+                              <th className="border-r-2 border-black p-1">NOME DE GUERRA</th>
+                              <th className="border-r-2 border-black p-1 w-[10%]">OME</th>
+                              <th className="border-r-2 border-black p-1 w-[10%]">FUNÇÃO</th>
+                              <th className="border-r-2 border-black p-1 w-[5%]">DIAS</th>
+                              <th className="border-r-2 border-black p-1 w-[5%]">COTAS</th>
+                              <th className="p-1 w-[15%]">JORNADA</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((row, idx) => (
+                              <tr key={idx} className="border-x-2 border-b-2 border-black text-center group hover:bg-slate-50 transition-colors">
+                                <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.graduacaoPosto || '#N/D'}</td>
+                                <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.matricula || '#N/D'}</td>
+                                <td className="border-r-2 border-black py-0.5 font-bold text-left px-2 uppercase">{row.pol?.nomeGuerra || ''}</td>
+                                <td className="border-r-2 border-black py-0.5 font-bold">9ª CIPM</td>
+                                <td className="border-r-2 border-black py-0.5 font-bold">{service.categoria || 'P.O'}</td>
+                                <td className="border-r-2 border-black py-0.5 font-black">{row.day}</td>
+                                <td className="border-r-2 border-black py-0.5 font-black">{row.pol ? '1' : ''}</td>
+                                <td className="font-bold py-0.5">{service.horarioInicio} as {service.horarioTermino} (12h)</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-8">
+                              <td colSpan={6} className="p-1 text-center border-r-2 border-black uppercase">TOTAL</td>
+                              <td className="p-1 text-center bg-white border-r-2 border-black">{totalCotasValue}</td>
+                              <td className="bg-white"></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                    </div>
+                  </div>
+                );
+              });
+           })()}
         </div>
       ) : (
         <div className="space-y-2">
@@ -1038,6 +1201,16 @@ const Escalas = () => {
                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Modelo de Visualização</label>
                         <div id="report-mode-selector" className="flex gap-2 p-1 bg-slate-100 rounded-xl">
                           <button 
+                            id="report-mode-official-btn"
+                            onClick={() => setReportConfig({...reportConfig, mode: 'OFFICIAL'})}
+                            className={cn(
+                              "flex-1 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                              reportConfig.mode === 'OFFICIAL' ? "bg-white text-pmpe-navy shadow-sm" : "text-slate-400"
+                            )}
+                          >
+                            Modelo Oficial
+                          </button>
+                          <button 
                             id="report-mode-sei-btn"
                             onClick={() => setReportConfig({...reportConfig, mode: 'SEI'})}
                             className={cn(
@@ -1297,6 +1470,95 @@ const Escalas = () => {
                   })}
                </tbody>
             </table>
+          </div>
+          
+          {/* OFFICIAL REPORT VIEW */}
+          <div 
+            ref={officialRef}
+            className="bg-white p-8 text-black font-sans"
+            style={{ width: '210mm' }}
+          >
+            {(() => {
+              const reportScales = getReportScales();
+              // Group scales by service to create one table per service
+              const serviceIds = Array.from(new Set(reportScales.map(e => e.serviceTypeId)));
+              
+              if (serviceIds.length === 0) return <div className="text-center p-20 uppercase font-black opacity-20">Nenhuma escala para o período</div>;
+
+              return serviceIds.map(sid => {
+                const service = services.find(s => s.id === sid);
+                const serviceScales = reportScales.filter(e => e.serviceTypeId === sid);
+                const configDateObj = new Date(reportConfig.date.length === 7 ? reportConfig.date + '-01' : reportConfig.date);
+                const monthDays = eachDayOfInterval({
+                  start: startOfMonth(configDateObj),
+                  end: endOfMonth(configDateObj)
+                });
+
+                // Prepare data for the table
+                // If multiple people per day, we need multiple rows for that day
+                const rows: any[] = [];
+                monthDays.forEach(day => {
+                  const dayScales = serviceScales.filter(e => isSameDay(e.date.toDate(), day));
+                  if (dayScales.length === 0) {
+                    rows.push({ day: getDate(day), pol: null });
+                  } else {
+                    dayScales.forEach(esc => {
+                      esc.policemen?.forEach(p => {
+                        rows.push({ day: getDate(day), pol: p, esc });
+                      });
+                    });
+                  }
+                });
+
+                const totalCotas = rows.reduce((acc, row) => acc + (row.pol ? 1 : 0), 0);
+
+                return (
+                  <div key={sid} className="mb-12 page-break-after-always official-report-table">
+                    <div className="bg-[#f28c28] text-black font-black text-center py-1 border-2 border-black uppercase text-sm mb-0">
+                      ESCALA {service?.nome} – 9ª CIPM – {format(configDateObj, 'MMMM yyyy', { locale: ptBR })}
+                    </div>
+                    <div className="bg-[#dcdcdc] text-black font-black text-center py-0.5 border-x-2 border-b-2 border-black uppercase text-[10px] mb-0">
+                      LOCAL: {service?.cidade} – {service?.horarioInicio} AS {service?.horarioTermino}
+                    </div>
+                    <table className="w-full border-collapse border-b-2 border-black text-[9px]">
+                      <thead>
+                        <tr className="bg-white font-black uppercase text-center border-x-2 border-black">
+                          <th className="border-r-2 border-black p-1 w-20">GRADUAÇÃO</th>
+                          <th className="border-r-2 border-black p-1 w-20">MATRÍCULA</th>
+                          <th className="border-r-2 border-black p-1">NOME DE GUERRA</th>
+                          <th className="border-r-2 border-black p-1 w-20">OME</th>
+                          <th className="border-r-2 border-black p-1 w-20">FUNÇÃO</th>
+                          <th className="border-r-2 border-black p-1 w-10">DIAS</th>
+                          <th className="border-r-2 border-black p-1 w-10">COTAS</th>
+                          <th className="p-1 w-32">JORNADA</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row, idx) => (
+                          <tr key={idx} className="border-x-2 border-b-2 border-black text-center h-5">
+                            <td className="border-r-2 border-black font-bold">{row.pol?.graduacaoPosto || '#N/D'}</td>
+                            <td className="border-r-2 border-black font-bold">{row.pol?.matricula || '#N/D'}</td>
+                            <td className="border-r-2 border-black font-bold text-left px-2 uppercase truncate max-w-[150px]">{row.pol?.nomeGuerra || ''}</td>
+                            <td className="border-r-2 border-black font-bold">9ª CIPM</td>
+                            <td className="border-r-2 border-black font-bold">{service?.categoria || 'P.O'}</td>
+                            <td className="border-r-2 border-black font-black">{row.day}</td>
+                            <td className="border-r-2 border-black font-black">{row.pol ? '1' : ''}</td>
+                            <td className="font-bold text-[8px]">{service?.horarioInicio} as {service?.horarioTermino} (12h)</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black">
+                          <td colSpan={6} className="p-1 text-center border-r-2 border-black">TOTAL</td>
+                          <td className="p-1 text-center">{totalCotas}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                );
+              });
+            })()}
           </div>
       </div>
     </div>
