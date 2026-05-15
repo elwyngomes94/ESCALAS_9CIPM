@@ -1093,7 +1093,7 @@ const CreateEscala = () => {
                                 disabled={submitting || isFull}
                                 onClick={() => handleAssignService(s.id!)}
                                 className={cn(
-                                  "p-6 rounded-[32px] flex items-center justify-between group transition-all text-left shadow-lg bg-white border border-slate-100",
+                                  "p-4 rounded-2xl flex items-center justify-between group transition-all text-left shadow-sm bg-white border border-slate-100",
                                   isFull ? "opacity-50 grayscale cursor-not-allowed" : "hover:border-pmpe-navy/30 hover:bg-slate-50 hover:shadow-2xl active:scale-[0.98]"
                                 )}
                               >
@@ -1131,11 +1131,11 @@ const CreateEscala = () => {
                   </div>
                </div>
                
-               <div className="p-10 bg-slate-50/50 border-t border-slate-100 flex gap-4">
+               <div className="p-5 bg-slate-50/50 border-t border-slate-100 flex gap-4">
                   <button 
                     onClick={() => setAssignmentModal(null)}
-                    className="flex-1 py-5 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] hover:text-slate-600 transition-colors"
-                  >Fechar Gestor</button>
+                    className="flex-1 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                  >Fechar</button>
                </div>
             </motion.div>
           </div>
