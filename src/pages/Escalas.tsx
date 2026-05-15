@@ -819,18 +819,24 @@ const Escalas = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {rows.map((row, idx) => (
-                              <tr key={idx} className="border-x-2 border-b-2 border-black text-center group hover:bg-slate-50 transition-colors">
-                                <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.graduacaoPosto || '#N/D'}</td>
-                                <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.matricula || '#N/D'}</td>
-                                <td className="border-r-2 border-black py-0.5 font-bold text-left px-2 uppercase">{row.pol?.nomeGuerra || ''}</td>
-                                <td className="border-r-2 border-black py-0.5 font-bold">9ª CIPM</td>
-                                <td className="border-r-2 border-black py-0.5 font-bold">{service.categoria || 'P.O'}</td>
-                                <td className="border-r-2 border-black py-0.5 font-black">{row.day}</td>
-                                <td className="border-r-2 border-black py-0.5 font-black">{row.pol ? '1' : ''}</td>
-                                <td className="font-bold py-0.5">{service.horarioInicio} as {service.horarioTermino} (12h)</td>
-                              </tr>
-                            ))}
+                        {rows.map((row, idx) => (
+                          <tr 
+                            key={idx} 
+                            className={cn(
+                              "border-x-2 border-b-2 border-black text-center group transition-colors",
+                              row.day % 2 === 0 ? "bg-blue-50/40" : "bg-red-50/40"
+                            )}
+                          >
+                            <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.graduacaoPosto || '#N/D'}</td>
+                            <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.matricula || '#N/D'}</td>
+                            <td className="border-r-2 border-black py-0.5 font-bold text-left px-2 uppercase">{row.pol?.nomeGuerra || ''}</td>
+                            <td className="border-r-2 border-black py-0.5 font-bold">9ª CIPM</td>
+                            <td className="border-r-2 border-black py-0.5 font-bold">{service.categoria || 'P.O'}</td>
+                            <td className="border-r-2 border-black py-0.5 font-black">{row.day}</td>
+                            <td className="border-r-2 border-black py-0.5 font-black">{row.pol ? '1' : ''}</td>
+                            <td className="font-bold py-0.5">{service.horarioInicio} as {service.horarioTermino} (12h)</td>
+                          </tr>
+                        ))}
                           </tbody>
                           <tfoot>
                             <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-8">
@@ -1560,7 +1566,13 @@ const Escalas = () => {
                       </thead>
                       <tbody>
                         {rows.map((row, idx) => (
-                          <tr key={idx} className="border-x-2 border-b-2 border-black text-center h-5">
+                          <tr 
+                            key={idx} 
+                            className={cn(
+                              "border-x-2 border-b-2 border-black text-center h-5",
+                              row.day % 2 === 0 ? "bg-[#e0f2fe]" : "bg-[#fee2e2]"
+                            )}
+                          >
                             <td className="border-r-2 border-black font-bold">{row.pol?.graduacaoPosto || '#N/D'}</td>
                             <td className="border-r-2 border-black font-bold">{row.pol?.matricula || '#N/D'}</td>
                             <td className="border-r-2 border-black font-bold text-left px-2 uppercase truncate max-w-[150px]">{row.pol?.nomeGuerra || ''}</td>
