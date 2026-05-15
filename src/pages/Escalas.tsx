@@ -194,7 +194,7 @@ const Escalas = () => {
     message += `*EFETIVO ESCALADO:*\n`;
     
     esc.policemen.forEach((p: any, i: number) => {
-      message += `${i + 1}. ${p.graduacaoPosto} ${p.nomeGuerra} (${p.matricula})\n`;
+      message += `${i + 1}. ${p.graduacaoPosto} ${p.nomeGuerra} (${p.matricula}) 👮🚨\n`;
     });
 
     if (esc.observations) {
@@ -361,7 +361,7 @@ const Escalas = () => {
           message += `*Dia ${day}:*\n`;
           esc.policemen?.forEach((p, idx) => {
             const role = idx === 0 ? '👑' : (p.isMotorista ? '🚗' : '👤');
-            message += ` - ${role} ${p.graduacaoPosto} ${p.nomeGuerra}\n`;
+            message += ` - ${role} ${p.graduacaoPosto} ${p.nomeGuerra} [Mat: ${p.matricula}] 👮🚨\n`;
           });
           message += `\n`;
         });
