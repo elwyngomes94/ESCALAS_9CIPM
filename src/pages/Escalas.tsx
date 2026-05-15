@@ -544,6 +544,31 @@ const Escalas = () => {
                   <FileText className="w-3.5 h-3.5 text-pmpe-gold" />
                   Gerar Relatórios
                 </button>
+                {viewMode === 'official' && (
+                  <button
+                    onClick={() => {
+                      setReportConfig({
+                        ...reportConfig,
+                        mode: 'OFFICIAL',
+                        scope: 'MONTH',
+                        date: format(currentMonth, 'yyyy-MM')
+                      });
+                      setTimeout(exportBatchPDF, 100);
+                    }}
+                    disabled={generatingReport}
+                    className={cn(
+                      "px-3 py-1.5 text-[9px] font-black text-white uppercase tracking-widest bg-emerald-600 rounded-lg shadow-sm hover:bg-emerald-700 transition-all flex items-center gap-2",
+                      generatingReport && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {generatingReport ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    Baixar PDF
+                  </button>
+                )}
                 <div className="w-px h-6 bg-slate-200 mx-1" />
                 {isSelectionMode ? (
                   <>
