@@ -228,6 +228,21 @@ const CreateEscala = () => {
        return;
     }
 
+    // 2. Quota Check for the Policeman (Volunteered Quotas)
+    const volunteer = joinedVolunteers.find(v => v.policemanId === policemanId && v.type === typeBeingAssigned);
+    const maxAllowedQuotas = volunteer?.cotas || 0;
+    
+    // Sum of quotas already used by this policeman in this month for this service type
+    const currentMonthCotasUsed = joinedEscalas.filter(e => 
+      e.policemenIds.includes(policemanId) && 
+      e.service?.tipo === typeBeingAssigned
+    ).reduce((acc, e) => acc + (e.service?.cotasPorServico || 1), 0);
+
+    if (currentMonthCotasUsed + needed > maxAllowedQuotas) {
+      alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar mais ${needed}.`);
+      return;
+    }
+
     const existingEscala = joinedEscalas.find(e => 
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
