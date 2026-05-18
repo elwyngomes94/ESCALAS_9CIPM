@@ -297,14 +297,19 @@ const Escalas = () => {
     });
   };
 
-  const exportBatchPDF = async () => {
+  const exportBatchPDF = async (filterType?: 'PJES' | 'OPS') => {
     // Official Mode Multi-page
     if (!officialRef.current) return;
     setGeneratingReport(true);
     try {
-      const tables = officialRef.current.querySelectorAll('.official-report-table');
+      let tables = Array.from(officialRef.current.querySelectorAll('.official-report-table')) as HTMLElement[];
+      
+      if (filterType) {
+        tables = tables.filter(t => t.dataset.type === filterType);
+      }
+
       if (tables.length === 0) {
-        alert('Nenhuma escala encontrada para gerar o relatório.');
+        alert(`Nenhuma escala ${filterType || ''} encontrada para gerar o relatório.`);
         setGeneratingReport(false);
         return;
       }
@@ -315,7 +320,7 @@ const Escalas = () => {
       const pageHeight = pdf.internal.pageSize.getHeight();
 
       for (let i = 0; i < tables.length; i++) {
-        const table = tables[i] as HTMLElement;
+        const table = tables[i];
         
         // Ensure background is solid white for the capture
         const originalBg = table.style.backgroundColor;
@@ -351,7 +356,8 @@ const Escalas = () => {
         pdf.addImage(imgData, 'PNG', xPos, margin, finalImgWidth, finalImgHeight, undefined, 'FAST');
       }
 
-      pdf.save(`Escala_Mensal_9CIPM_${format(currentMonth, 'MMMM_yyyy', { locale: ptBR })}.pdf`);
+      const typeSuffix = filterType ? `_${filterType}` : '';
+      pdf.save(`Escala_Mensal_9CIPM_${format(currentMonth, 'MMMM_yyyy', { locale: ptBR })}${typeSuffix}.pdf`);
     } catch (err) {
       console.error(err);
       alert('Erro ao gerar PDF: ' + (err instanceof Error ? err.message : String(err)));
@@ -488,27 +494,50 @@ const Escalas = () => {
               <div className="flex items-center gap-2">
                 {viewMode === 'official' && (
                   <>
-                    <button
-                      onClick={() => {
-                        setGeneratingReport(true);
-                        setTimeout(async () => {
-                          await exportBatchPDF();
-                          setGeneratingReport(false);
-                        }, 100);
-                      }}
-                      disabled={generatingReport}
-                      className={cn(
-                        "px-3 py-1.5 text-[9px] font-black text-white uppercase tracking-widest bg-emerald-600 rounded-lg shadow-sm hover:bg-emerald-700 transition-all flex items-center gap-2",
-                        generatingReport && "opacity-50 cursor-not-allowed"
-                      )}
-                    >
-                      {generatingReport ? (
-                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <Download className="w-3.5 h-3.5" />
-                      )}
-                      Baixar PDF
-                    </button>
+                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 gap-1">
+                      <button
+                        onClick={() => {
+                          setGeneratingReport(true);
+                          setTimeout(async () => {
+                            await exportBatchPDF('PJES');
+                            setGeneratingReport(false);
+                          }, 100);
+                        }}
+                        disabled={generatingReport}
+                        className={cn(
+                          "px-3 py-1.5 text-[9px] font-black text-white uppercase tracking-widest bg-pmpe-navy rounded-lg shadow-sm hover:bg-slate-800 transition-all flex items-center gap-2",
+                          generatingReport && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        {generatingReport ? (
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        PJES
+                      </button>
+                      <button
+                        onClick={() => {
+                          setGeneratingReport(true);
+                          setTimeout(async () => {
+                            await exportBatchPDF('OPS');
+                            setGeneratingReport(false);
+                          }, 100);
+                        }}
+                        disabled={generatingReport}
+                        className={cn(
+                          "px-3 py-1.5 text-[9px] font-black text-pmpe-navy uppercase tracking-widest bg-pmpe-gold rounded-lg shadow-sm hover:bg-amber-500 transition-all flex items-center gap-2",
+                          generatingReport && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        {generatingReport ? (
+                          <div className="w-3.5 h-3.5 border-2 border-pmpe-navy/30 border-t-pmpe-navy rounded-full animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        OPS
+                      </button>
+                    </div>
                     <button
                       onClick={shareOfficialWhatsApp}
                       className="px-3 py-1.5 text-[9px] font-black text-white uppercase tracking-widest bg-green-600 rounded-lg shadow-sm hover:bg-green-700 transition-all flex items-center gap-2"
@@ -765,7 +794,7 @@ const Escalas = () => {
                       const totalCotasValue = rows.length;
 
                       return (
-                        <div key={service.id} className="official-report-table bg-white p-1 shadow-2xl border-2 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
+                        <div key={service.id} data-type={service.tipo} className="official-report-table bg-white p-1 shadow-2xl border-2 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
                           <div className="min-w-[900px]">
                               <div 
                                 className="text-black font-black text-center py-3 border-2 border-black uppercase text-base"
