@@ -605,7 +605,7 @@ const CreateEscala = () => {
                        </td>
                      </tr>
                   ) : filteredVolunteers.map(v => {
-                    const scaledPMRecords = allEscalasOfMonth.filter(e => e.policemenIds.includes(v.policemanId));
+                    const scaledPMRecords = joinedEscalas.filter(e => e.policemenIds.includes(v.policemanId));
                     const scaledCount = scaledPMRecords.length;
                     const solicted = v.cotas || 0;
                     const remaining = solicted - scaledCount;
