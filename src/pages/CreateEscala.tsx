@@ -215,7 +215,41 @@ const CreateEscala = () => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const needed = service.cotasPorServico || 1;
     
-    // 1. Strict Duplication Check (Check ALL scales for this person on this day)
+    // 1. Time Overlap check
+    const timeToMinutes = (timeStr: string) => {
+      if (!timeStr) return 0;
+      const cleanTime = timeStr.replace(/[^\d:]/g, '');
+      const [h, m] = cleanTime.split(':').map(Number);
+      return (Number.isNaN(h) ? 0 : h) * 60 + (Number.isNaN(m) ? 0 : m);
+    };
+
+    const start1 = timeToMinutes(service.horarioInicio);
+    let end1 = timeToMinutes(service.horarioTermino);
+    if (end1 <= start1) end1 += 1440; // Turno virando o dia
+
+    const overlappingScale = joinedEscalas.find(e => {
+      const eDateStr = format(e.date.toDate(), 'yyyy-MM-dd');
+      if (eDateStr !== dateStr) return false;
+      if (!e.policemenIds.includes(policemanId)) return false;
+      
+      const otherS = e.service;
+      if (!otherS) return false;
+
+      const start2 = timeToMinutes(otherS.horarioInicio);
+      let end2 = timeToMinutes(otherS.horarioTermino);
+      if (end2 <= start2) end2 += 1440;
+
+      return (start1 < end2) && (end1 > start2);
+    });
+
+    if (overlappingScale) {
+       alert(`Conflito de Horário! O policial já está escalado no serviço ${overlappingScale.service?.sigla} (${overlappingScale.service?.horarioInicio}-${overlappingScale.service?.horarioTermino}) que choca com este horário.`);
+       return;
+    }
+
+    // 2. Strict Duplication Check (Check same TYPE on same day - except if overlap already caught it, but we keep this to prevent dual same-type same-day even if sequential, unless user wants to allow that too?)
+    // User said: "pode ser escalado juntamente ao PJES... só não pode chocar os horários". 
+    // This implies PJES+OPS is OK. What about PJES+PJES? Usually NOT OK.
     const typeBeingAssigned = service.tipo; // 'PJES' or 'OPS'
     const alreadyScaledInSameType = joinedEscalas.find(e => 
       format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
@@ -223,31 +257,33 @@ const CreateEscala = () => {
       e.service?.tipo === typeBeingAssigned
     );
 
-    if (alreadyScaledInSameType) {
-       alert(`Este policial já possui uma escala de ${typeBeingAssigned} para este dia (${alreadyScaledInSameType.service?.sigla}).`);
+    if (alreadyScaledInSameType && typeBeingAssigned === 'PJES') {
+       alert(`Este policial já possui uma escala de PJES para este dia (${alreadyScaledInSameType.service?.sigla}).`);
        return;
     }
 
-    // 2. Quota Check for the Policeman (Volunteered Quotas)
-    const volunteer = joinedVolunteers.find(v => v.policemanId === policemanId && v.type === typeBeingAssigned);
-    const maxAllowedQuotas = volunteer?.cotas || 0;
-    
-    // Sum of quotas already used by this policeman in this month for this service type
-    const currentMonthCotasUsed = joinedEscalas.filter(e => 
-      e.policemenIds.includes(policemanId) && 
-      e.service?.tipo === typeBeingAssigned
-    ).reduce((acc, e) => acc + (e.service?.cotasPorServico || 1), 0);
+    // 3. Quota Check for the Policeman (Volunteered Quotas) - SKIP IF OPS
+    if (typeBeingAssigned !== 'OPS') {
+      const volunteer = joinedVolunteers.find(v => v.policemanId === policemanId && v.type === typeBeingAssigned);
+      const maxAllowedQuotas = volunteer?.cotas || 0;
+      
+      // Sum of quotas already used by this policeman in this month for this service type
+      const currentMonthCotasUsed = joinedEscalas.filter(e => 
+        e.policemenIds.includes(policemanId) && 
+        e.service?.tipo === typeBeingAssigned
+      ).reduce((acc, e) => acc + (e.service?.cotasPorServico || 1), 0);
 
-    if (currentMonthCotasUsed + needed > maxAllowedQuotas) {
-      alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar mais ${needed}.`);
-      return;
+      if (currentMonthCotasUsed + needed > maxAllowedQuotas) {
+        alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas.`);
+        return;
+      }
     }
 
     const existingEscala = joinedEscalas.find(e => 
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
 
-    // 3. Vacancy Check (vagasNecessarias)
+    // 4. Vacancy Check (vagasNecessarias)
     const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
     const maxSlots = service.vagasNecessarias || 0; 
 
@@ -258,10 +294,12 @@ const CreateEscala = () => {
 
     const type = service.tipo as 'PJES' | 'OPS';
     
-    // Quota Checks
+    // Quota Checks - SKIP UNIT QUOTA LIMIT IF OPS
     let limit = 0;
     let used = 0;
-    if (type === 'OPS') { limit = unitQuotas?.opsTotal || 0; used = currentUsage.OPS; }
+    if (type === 'OPS') { 
+      limit = 0; // No limit for OPS 
+    }
     else {
       const subtype = service.pjesSubtype;
       if (subtype === 'MP') { limit = unitQuotas?.pjesMPTotal || 0; used = currentUsage.PJES_MP; }
@@ -691,8 +729,8 @@ const CreateEscala = () => {
                                   
                                   // Specific type check for drop
                                   const alreadyHasType = ds && scales.some(s => s.service?.tipo === ds.tipo);
-                                  if (alreadyHasType) {
-                                    alert(`Este policial já possui uma escala de ${ds.tipo} para este dia.`);
+                                  if (alreadyHasType && ds?.tipo === 'PJES') {
+                                    alert(`Este policial já possui uma escala de PJES para este dia.`);
                                     return;
                                   }
 
@@ -732,8 +770,8 @@ const CreateEscala = () => {
                                     return;
                                   }
                                   
-                                  if (hasSameTypeScale) {
-                                     alert(`Este policial já possui uma escala de ${currentSelectedService?.tipo} para este dia.`);
+                                  if (hasSameTypeScale && currentSelectedService?.tipo === 'PJES') {
+                                     alert(`Este policial já possui uma escala de PJES para este dia.`);
                                      return;
                                   }
 

@@ -762,31 +762,31 @@ const Escalas = () => {
                     const totalCotasValue = rows.length;
 
                     return (
-                      <div key={service.id} className="official-report-table bg-white p-1 shadow-2xl border-4 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
+                      <div key={service.id} className="official-report-table bg-white p-1 shadow-2xl border-2 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
                         <div className="min-w-[900px]">
                             {/* Main Header */}
                             <div 
-                              className="text-black font-black text-center py-3 border-4 border-black uppercase text-base"
+                              className="text-black font-black text-center py-3 border-2 border-black uppercase text-base"
                               style={{ backgroundColor: '#f28c28' }}
                             >
                               ESCALA {service.nome} – 9ª CIPM – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
                             </div>
                             
                             {/* Sub Header */}
-                            <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-4 border-b-4 border-black uppercase text-[11px] tracking-widest">
+                            <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[11px] tracking-widest">
                               LOCAL: {service.cidade} – {service.horarioInicio} AS {service.horarioTermino}
                             </div>
 
                             <table className="w-full border-collapse text-[11px]">
                               <thead>
-                                <tr className="bg-white font-black uppercase text-center border-x-4 border-black border-b-4 border-black">
-                                  <th className="border-r-4 border-black py-2 px-1 w-[12%]">GRADUAÇÃO</th>
-                                  <th className="border-r-4 border-black py-2 px-1 w-[12%]">MATRÍCULA</th>
-                                  <th className="border-r-4 border-black py-2 px-1">NOME DE GUERRA</th>
-                                  <th className="border-r-4 border-black py-2 px-1 w-[10%]">OME</th>
-                                  <th className="border-r-4 border-black py-2 px-1 w-[10%]">FUNÇÃO</th>
-                                  <th className="border-r-4 border-black py-2 px-1 w-[6%]">DIAS</th>
-                                  <th className="border-r-4 border-black py-2 px-1 w-[6%]">COTAS</th>
+                                <tr className="bg-white font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
+                                  <th className="border-r-2 border-black py-2 px-1 w-[12%]">GRADUAÇÃO</th>
+                                  <th className="border-r-2 border-black py-2 px-1 w-[12%]">MATRÍCULA</th>
+                                  <th className="border-r-2 border-black py-2 px-1">NOME DE GUERRA</th>
+                                  <th className="border-r-2 border-black py-2 px-1 w-[10%]">OME</th>
+                                  <th className="border-r-2 border-black py-2 px-1 w-[10%]">FUNÇÃO</th>
+                                  <th className="border-r-2 border-black py-2 px-1 w-[6%]">DIAS</th>
+                                  <th className="border-r-2 border-black py-2 px-1 w-[6%]">COTAS</th>
                                   <th className="py-2 px-1 w-[18%]">JORNADA</th>
                                 </tr>
                               </thead>
@@ -794,26 +794,26 @@ const Escalas = () => {
                                 {rows.map((row, idx) => (
                                   <tr 
                                     key={idx} 
-                                    className="border-x-4 border-b-4 border-black text-center font-black"
+                                    className="border-x-2 border-b-2 border-black text-center font-black"
                                     style={{ 
                                       backgroundColor: idx % 2 === 0 ? '#f28c28' : '#ffffff',
                                       color: idx % 2 === 0 ? '#000000' : '#000000'
                                     }}
                                   >
-                                    <td className="border-r-4 border-black py-1.5">{row.pol?.graduacaoPosto}</td>
-                                    <td className="border-r-4 border-black py-1.5">{row.pol?.matricula}</td>
-                                    <td className="border-r-4 border-black py-1.5 uppercase px-2">{row.pol?.nomeGuerra}</td>
-                                    <td className="border-r-4 border-black py-1.5">9ª CIPM</td>
-                                    <td className="border-r-4 border-black py-1.5">{service.categoria || 'P.O'}</td>
-                                    <td className="border-r-4 border-black py-1.5 text-lg">{row.day}</td>
-                                    <td className="border-r-4 border-black py-1.5 text-lg">1</td>
+                                    <td className="border-r-2 border-black py-1.5">{row.pol?.graduacaoPosto}</td>
+                                    <td className="border-r-2 border-black py-1.5">{row.pol?.matricula}</td>
+                                    <td className="border-r-2 border-black py-1.5 uppercase px-2">{row.pol?.nomeGuerra}</td>
+                                    <td className="border-r-2 border-black py-1.5">9ª CIPM</td>
+                                    <td className="border-r-2 border-black py-1.5">{service.categoria || 'P.O'}</td>
+                                    <td className="border-r-2 border-black py-1.5 text-lg">{row.day}</td>
+                                    <td className="border-r-2 border-black py-1.5 text-lg">1</td>
                                     <td className="py-1.5">{row.jornada} (12h)</td>
                                   </tr>
                                 ))}
                               </tbody>
                               <tfoot>
-                                <tr className="bg-[#dcdcdc] font-black border-x-4 border-b-4 border-black h-12">
-                                  <td colSpan={6} className="p-2 text-center border-r-4 border-black uppercase text-sm">TOTAL</td>
+                                <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-12">
+                                  <td colSpan={6} className="p-2 text-center border-r-2 border-black uppercase text-sm">TOTAL</td>
                                   <td colSpan={2} className="p-2 text-center text-xl bg-white">{totalCotasValue}</td>
                                 </tr>
                               </tfoot>
@@ -1256,37 +1256,37 @@ const Escalas = () => {
       {/* Hidden high-res renderer for individual PDF export */}
       <div className="fixed top-[-9999px] left-[-9999px] pointer-events-none opacity-0">
         {scaleToPrint && (
-          <div ref={printSingleRef} className="bg-white p-5 w-[900px] border-4 border-black">
+          <div ref={printSingleRef} className="bg-white p-5 w-[900px] border-2 border-black">
             {/* Header section similar to image */}
             <div 
-              className="text-black font-black text-center py-4 border-4 border-black uppercase text-xl"
+              className="text-black font-black text-center py-4 border-2 border-black uppercase text-xl"
               style={{ backgroundColor: '#f28c28' }}
             >
               ESCALA {scaleToPrint.service?.nome} – 9ª CIPM – {scaleToPrint.date ? format(scaleToPrint.date.toDate(), 'MMMM yyyy', { locale: ptBR }) : ''}
             </div>
             
-            <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-4 border-b-4 border-black uppercase text-[12px] tracking-widest">
+            <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[12px] tracking-widest">
               LOCAL: {scaleToPrint.service?.cidade} – {scaleToPrint.service?.horarioInicio} AS {scaleToPrint.service?.horarioTermino}
             </div>
 
             <table className="w-full border-collapse text-[12px]">
               <thead>
-                <tr className="bg-white font-black uppercase text-center border-x-4 border-black border-b-4 border-black">
-                  <th className="border-r-4 border-black py-3 px-2 w-[15%]">GRADUAÇÃO</th>
-                  <th className="border-r-4 border-black py-3 px-2 w-[15%]">MATRÍCULA</th>
-                  <th className="border-r-4 border-black py-3 px-2">NOME DE GUERRA</th>
-                  <th className="border-r-4 border-black py-3 px-2 w-[12%]">OME</th>
-                  <th className="border-r-4 border-black py-3 px-2 w-[12%]">FUNÇÃO</th>
+                <tr className="bg-white font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
+                  <th className="border-r-2 border-black py-3 px-2 w-[15%]">GRADUAÇÃO</th>
+                  <th className="border-r-2 border-black py-3 px-2 w-[15%]">MATRÍCULA</th>
+                  <th className="border-r-2 border-black py-3 px-2">NOME DE GUERRA</th>
+                  <th className="border-r-2 border-black py-3 px-2 w-[12%]">OME</th>
+                  <th className="border-r-2 border-black py-3 px-2 w-[12%]">FUNÇÃO</th>
                 </tr>
               </thead>
               <tbody>
                 {scaleToPrint.policemen?.map((pol: any, idx: number) => (
-                  <tr key={idx} className="border-x-4 border-b-4 border-black text-center font-black">
-                    <td className="border-r-4 border-black py-2.5">{pol.graduacaoPosto}</td>
-                    <td className="border-r-4 border-black py-2.5">{pol.matricula}</td>
-                    <td className="border-r-4 border-black py-2.5 text-left px-8 uppercase text-pmpe-navy">{pol.nomeGuerra}</td>
-                    <td className="border-r-4 border-black py-2.5 font-bold">9ª CIPM</td>
-                    <td className="border-r-4 border-black py-2.5">
+                  <tr key={idx} className="border-x-2 border-b-2 border-black text-center font-black">
+                    <td className="border-r-2 border-black py-2.5">{pol.graduacaoPosto}</td>
+                    <td className="border-r-2 border-black py-2.5">{pol.matricula}</td>
+                    <td className="border-r-2 border-black py-2.5 text-left px-8 uppercase text-pmpe-navy">{pol.nomeGuerra}</td>
+                    <td className="border-r-2 border-black py-2.5 font-bold">9ª CIPM</td>
+                    <td className="border-r-2 border-black py-2.5">
                       {idx === 0 ? 'CMDT' : pol.isMotorista ? 'MOT' : 'PATRUL.'}
                     </td>
                   </tr>
@@ -1295,7 +1295,7 @@ const Escalas = () => {
             </table>
 
             {scaleToPrint.observations && (
-              <div className="mt-6 p-4 border-4 border-black">
+              <div className="mt-6 p-4 border-2 border-black">
                 <p className="text-[11px] font-black uppercase mb-1 underline">Observações:</p>
                 <p className="text-[13px] font-bold text-slate-800 whitespace-pre-wrap">{scaleToPrint.observations}</p>
               </div>
