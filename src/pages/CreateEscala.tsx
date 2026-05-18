@@ -416,13 +416,17 @@ const CreateEscala = () => {
 
     pIds.forEach(pid => {
       const pVolunteers = joinedVolunteers.filter(v => v.policemanId === pid);
-      const hasAnyScale = joinedEscalas.some(e => e.policemenIds.includes(pid));
       
       // Filter logic: person belongs to this tab if:
       // a) They volunteered for this tab's type
-      // b) They were scaled (in any service) - "mirror scaled personnel"
+      // b) They were scaled in a service of this tab's type
+      const hasScaleInThisTabType = joinedEscalas.some(e => 
+        e.policemenIds.includes(pid) && 
+        e.service?.tipo === activeTab
+      );
+
       const vInTab = pVolunteers.find(v => v.type === activeTab);
-      const shouldShow = !!vInTab || hasAnyScale;
+      const shouldShow = !!vInTab || hasScaleInThisTabType;
 
       if (shouldShow) {
         // Use matching volunteer record or fallback

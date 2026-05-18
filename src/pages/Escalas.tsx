@@ -797,7 +797,7 @@ const Escalas = () => {
                                       key={idx} 
                                       className="border-x-2 border-b-2 border-black text-center font-black"
                                       style={{ 
-                                        backgroundColor: idx % 2 === 0 ? '#f28c28' : '#ffffff',
+                                        backgroundColor: row.day % 2 !== 0 ? '#f28c28' : '#ffffff',
                                         color: '#000000'
                                       }}
                                     >
