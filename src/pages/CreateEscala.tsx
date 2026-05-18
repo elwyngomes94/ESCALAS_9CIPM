@@ -406,63 +406,16 @@ const CreateEscala = () => {
   });
 
   const filteredVolunteers = useMemo(() => {
-    // 1. Group all possible volunteers and scaled people
-    // We want unique policemanId per row
-    const pIds = new Set<string>();
-    joinedVolunteers.forEach(v => pIds.add(v.policemanId));
-    joinedEscalas.forEach(e => e.policemenIds.forEach(id => pIds.add(id)));
-
-    const result: (Volunteer & { policeman?: Policeman })[] = [];
-
-    pIds.forEach(pid => {
-      const pVolunteers = joinedVolunteers.filter(v => v.policemanId === pid);
-      
-      // Filter logic: person belongs to this tab if:
-      // a) They volunteered for this tab's type
-      // b) They were scaled in a service of this tab's type
-      const hasScaleInThisTabType = joinedEscalas.some(e => 
-        e.policemenIds.includes(pid) && 
-        e.service?.tipo === activeTab
-      );
-
-      const vInTab = pVolunteers.find(v => v.type === activeTab);
-      const shouldShow = !!vInTab || hasScaleInThisTabType;
-
-      if (shouldShow) {
-        // Use matching volunteer record or fallback
-        let vRecord = vInTab || pVolunteers[0];
-        
-        if (!vRecord) {
-           vRecord = {
-             id: `virtual-${pid}`,
-             policemanId: pid,
-             type: activeTab,
-             month: mKey,
-             cotas: 0,
-             policeman: policemen[pid]
-           } as any;
-        } else {
-           // If we're displaying an OPS volunteer in PJES tab (or vice versa) 
-           // because they have scales, we treat it as 0 solicited quotas for THIS tab.
-           if (vRecord.type !== activeTab) {
-              vRecord = { ...vRecord, type: activeTab, cotas: 0 };
-           }
-        }
-
-        const poly = vRecord.policeman || policemen[pid];
-        const search = searchTerm.toLowerCase();
-        const matchesSearch = !searchTerm || 
+    const search = searchTerm.toLowerCase();
+    return joinedVolunteers
+      .filter(v => v.type === activeTab)
+      .filter(v => {
+        const poly = v.policeman;
+        return !searchTerm || 
           poly?.nomeGuerra.toLowerCase().includes(search) || 
           poly?.matricula.includes(search);
-
-        if (matchesSearch) {
-          result.push({ ...vRecord, policeman: poly });
-        }
-      }
-    });
-
-    return result;
-  }, [joinedVolunteers, joinedEscalas, activeTab, searchTerm, policemen, mKey]);
+      });
+  }, [joinedVolunteers, activeTab, searchTerm]);
 
   const totalPjesLimit = (unitQuotas?.pjesMPTotal || 0) + (unitQuotas?.pjesForumTotal || 0) + (unitQuotas?.pjesEscolarTotal || 0) + (unitQuotas?.pjesDecretoTotal || 0);
   const totalPjesUsed = currentUsage.PJES_MP + currentUsage.PJES_FORUM + currentUsage.PJES_ESCOLAR + currentUsage.PJES_DECRETO;
