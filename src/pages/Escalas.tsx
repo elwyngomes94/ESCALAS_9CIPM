@@ -660,16 +660,22 @@ const Escalas = () => {
           })}
         </div>
       ) : viewMode === 'official' ? (
-        <div className="space-y-8 bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-inner">
-           <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                 <Filter className="w-4 h-4 text-slate-400" />
-                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Filtrar Serviço Para Visualização:</span>
+        <div className="space-y-8 bg-slate-50 p-6 rounded-[24px] border border-slate-200 shadow-inner">
+           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                 <div className="w-12 h-12 rounded-xl bg-pmpe-navy/5 flex items-center justify-center border border-pmpe-navy/10">
+                   <Filter className="w-6 h-6 text-pmpe-navy" />
+                 </div>
+                 <div>
+                   <h4 className="text-[11px] font-black text-pmpe-navy uppercase tracking-[0.2em]">Configuração de Visualização</h4>
+                   <p className="text-[10px] font-medium text-slate-400">Selecione o serviço para detalhamento mensal</p>
+                 </div>
               </div>
               <select 
                 value={selectedServiceId}
                 onChange={(e) => setSelectedServiceId(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 text-xs font-bold text-pmpe-navy outline-none focus:ring-1 focus:ring-pmpe-navy"
+                className="bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-black text-pmpe-navy outline-none focus:ring-2 focus:ring-pmpe-navy/20 focus:border-pmpe-navy transition-all min-w-[300px] appearance-none cursor-pointer"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%231e293b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1em' }}
               >
                 <option value="">TODOS OS SERVIÇOS DO MÊS</option>
                 {services.filter(s => s.month === format(currentMonth, 'yyyy-MM')).map(s => (
@@ -688,91 +694,140 @@ const Escalas = () => {
               });
               
               if (filteredServices.length === 0) return (
-                <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-200">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Nenhum serviço configurado para este mês</p>
+                <div className="text-center py-24 bg-white rounded-[32px] border-2 border-dashed border-slate-200">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                    <ClipboardList className="w-8 h-8 text-slate-200" />
+                  </div>
+                  <p className="text-[12px] font-black uppercase text-slate-400 tracking-[0.2em]">Nenhum serviço configurado para este mês</p>
                 </div>
               );
 
-              return filteredServices.map(service => {
-                const serviceScales = escalas.filter(e => 
-                  e.serviceTypeId === service.id && 
-                  e.date.toDate() >= monthStart && e.date.toDate() <= monthEnd
-                );
-                
-                const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
-                const rows: any[] = [];
-                monthDays.forEach(day => {
-                  const dayScales = serviceScales.filter(e => isSameDay(e.date.toDate(), day));
-                  if (dayScales.length === 0) {
-                    rows.push({ day: getDate(day), pol: null });
-                  } else {
-                    dayScales.forEach(esc => {
-                      esc.policemen?.forEach(p => {
-                        rows.push({ day: getDate(day), pol: p, esc });
-                      });
+              return (
+                <div className="space-y-12" ref={officialRef}>
+                  {filteredServices.map(service => {
+                    const serviceScales = escalas.filter(e => 
+                      e.serviceTypeId === service.id && 
+                      e.date.toDate() >= monthStart && e.date.toDate() <= monthEnd
+                    );
+                    
+                    const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+                    const rows: any[] = [];
+                    monthDays.forEach(day => {
+                      const dayScales = serviceScales.filter(e => isSameDay(e.date.toDate(), day));
+                      if (dayScales.length === 0) {
+                        rows.push({ day: getDate(day), pol: null, date: day });
+                      } else {
+                        dayScales.forEach(esc => {
+                          esc.policemen?.forEach(p => {
+                            rows.push({ day: getDate(day), pol: p, esc, date: day });
+                          });
+                        });
+                      }
                     });
-                  }
-                });
 
-                const totalCotasValue = rows.reduce((acc, row) => acc + (row.pol ? 1 : 0), 0);
+                    const totalCotasValue = rows.reduce((acc, row) => acc + (row.pol ? 1 : 0), 0);
 
-                return (
-                  <div key={service.id} className="bg-white p-1 shadow-xl border border-slate-300 rounded overflow-x-auto">
-                    <div className="min-w-[800px]">
-                        <div 
-                          className="text-white font-black text-center py-2 border-2 border-black uppercase text-xs shadow-[inset_0_2px_10px_rgba(255,255,255,0.2)]"
-                          style={{ backgroundColor: service.color || '#f28c28' }}
-                        >
-                          ESCALA {service.nome} – 9ª CIPM – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                    return (
+                      <div key={service.id} className="official-report-table bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-200 rounded-[2px] overflow-x-auto relative">
+                        {/* Military Stamp Look */}
+                        <div className="absolute top-4 right-4 opacity-5 border-4 border-pmpe-navy p-2 rounded-xl rotate-12 pointer-events-none">
+                           <span className="text-2xl font-black text-pmpe-navy uppercase">9ª CIPM - OFICIAL</span>
                         </div>
-                        <div className="bg-[#dcdcdc] text-black font-black text-center py-1 border-x-2 border-b-2 border-black uppercase text-[9px]">
-                          LOCAL: {service.cidade} – {service.horarioInicio} AS {service.horarioTermino}
+
+                        <div className="min-w-[950px]">
+                            {/* Header Section */}
+                            <div className="border-b-[4px] border-black pb-4 mb-4 flex items-center gap-6">
+                               <div className="w-20 h-20 flex-shrink-0">
+                                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Bras%C3%A3o_da_PMPE.svg/1200px-Bras%C3%A3o_da_PMPE.svg.png" alt="PMPE" className="w-full h-full object-contain" />
+                               </div>
+                               <div className="flex-1 text-center">
+                                  <h2 className="text-[16px] font-black text-black leading-tight uppercase tracking-tight">Polícia Militar de Pernambuco</h2>
+                                  <h3 className="text-[14px] font-bold text-black leading-tight uppercase">Diretoria de Planejamento Operacional</h3>
+                                  <h4 className="text-[14px] font-bold text-black leading-tight uppercase">9ª Companhia Independente da Polícia Militar - Araripina</h4>
+                               </div>
+                               <div className="w-20 h-20 opacity-0 flex-shrink-0">PMPE</div>
+                            </div>
+
+                            <div 
+                              className="text-white font-black text-center py-3 border-x-2 border-t-2 border-black uppercase text-sm shadow-[inset_0_2px_15px_rgba(255,255,255,0.3)] relative overflow-hidden"
+                              style={{ backgroundColor: service.color || '#1e293b' }}
+                            >
+                              <div className="absolute inset-0 bg-black/10 mix-blend-overlay"></div>
+                              ESCALA NOMINAL DO SERVIÇO: {service.nome} – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                            </div>
+                            
+                            <div className="bg-slate-100/80 text-black font-black text-center py-2 border-2 border-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-8">
+                              <span className="flex items-center gap-2"><MapPin className="w-3 h-3" /> LOCAL: {service.cidade}</span>
+                              <span className="flex items-center gap-2"><Clock className="w-3 h-3" /> HORÁRIO: {service.horarioInicio} AS {service.horarioTermino}</span>
+                              <span className="flex items-center gap-2"><Info className="w-3 h-3" /> MODALIDADE: {service.categoria || 'P.O'}</span>
+                            </div>
+
+                            <table className="w-full border-collapse border-b-2 border-black text-[11px]">
+                              <thead>
+                                <tr className="bg-slate-50 font-black uppercase text-center border-x-2 border-black border-b border-black/40">
+                                  <th className="border-r-2 border-black py-3 px-1 w-[12%]">GRADUAÇÃO</th>
+                                  <th className="border-r-2 border-black py-3 px-1 w-[12%]">MATRÍCULA</th>
+                                  <th className="border-r-2 border-black py-3 px-1">NOME DE GUERRA</th>
+                                  <th className="border-r-2 border-black py-3 px-1 w-[10%]">OME</th>
+                                  <th className="border-r-2 border-black py-3 px-1 w-[10%]">FUNÇÃO</th>
+                                  <th className="border-r-2 border-black py-3 px-1 w-[6%]">DIA</th>
+                                  <th className="border-r-2 border-black py-3 px-1 w-[6%]">COTA</th>
+                                  <th className="py-3 px-1 w-[18%]">JORNADA DE TRABALHO</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map((row, idx) => {
+                                  const isWknd = row.date.getDay() === 0 || row.date.getDay() === 6;
+                                  return (
+                                    <tr 
+                                      key={idx} 
+                                      className={cn(
+                                        "border-x-2 border-b border-black/20 text-center transition-colors font-mono",
+                                        idx === rows.length - 1 && "border-b-2 border-black",
+                                        isWknd ? "bg-red-50/20" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
+                                      )}
+                                    >
+                                      <td className="border-r-2 border-black py-1 font-black text-slate-700">{row.pol?.graduacaoPosto || '---'}</td>
+                                      <td className="border-r-2 border-black py-1 font-black text-slate-700">{row.pol?.matricula || '---'}</td>
+                                      <td className="border-r-2 border-black py-1 font-black text-left px-4 uppercase text-pmpe-navy">{row.pol?.nomeGuerra || ''}</td>
+                                      <td className="border-r-2 border-black py-1 font-bold text-slate-500 text-[10px]">9ª CIPM</td>
+                                      <td className="border-r-2 border-black py-1 font-bold text-slate-500 text-[9px]">{service.categoria || 'P.O'}</td>
+                                      <td className={cn(
+                                        "border-r-2 border-black py-1 font-black text-[12px]",
+                                        isWknd ? "text-red-600" : "text-black"
+                                      )}>{row.day}</td>
+                                      <td className="border-r-2 border-black py-1 font-black text-slate-700">{row.pol ? '01' : '00'}</td>
+                                      <td className="font-bold py-1 text-slate-500 text-[10px]">{service.horarioInicio} às {service.horarioTermino} (12h)</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-slate-100 font-black border-x-2 border-b-2 border-black h-12">
+                                  <td colSpan={6} className="p-2 text-right pr-6 border-r-2 border-black uppercase text-xs tracking-widest">TOTAL DE COTAS DO SERVIÇO:</td>
+                                  <td className="p-2 text-center bg-white border-r-2 border-black text-lg text-pmpe-navy font-black shadow-inner">{totalCotasValue.toString().padStart(2, '0')}</td>
+                                  <td className="bg-white"></td>
+                                </tr>
+                              </tfoot>
+                            </table>
+
+                            {/* Signature Footer */}
+                            <div className="mt-12 grid grid-cols-2 gap-12 px-12 text-center">
+                               <div className="pt-8 border-t border-black">
+                                  <p className="text-[11px] font-black uppercase">P/3 - Chefe da Seção de Planejamento</p>
+                                  <p className="text-[10px] font-bold text-slate-400">9ª CIPM - Araripina</p>
+                               </div>
+                               <div className="pt-8 border-t border-black">
+                                  <p className="text-[11px] font-black uppercase">Comandante da 9ª CIPM</p>
+                                  <p className="text-[10px] font-bold text-slate-400">9ª CIPM - Araripina</p>
+                               </div>
+                            </div>
                         </div>
-                        <table className="w-full border-collapse border-b-2 border-black text-[10px]">
-                          <thead>
-                            <tr className="bg-white font-black uppercase text-center border-x-2 border-black">
-                              <th className="border-r-2 border-black p-1 w-[12%]">GRADUAÇÃO</th>
-                              <th className="border-r-2 border-black p-1 w-[12%]">MATRÍCULA</th>
-                              <th className="border-r-2 border-black p-1">NOME DE GUERRA</th>
-                              <th className="border-r-2 border-black p-1 w-[10%]">OME</th>
-                              <th className="border-r-2 border-black p-1 w-[10%]">FUNÇÃO</th>
-                              <th className="border-r-2 border-black p-1 w-[5%]">DIAS</th>
-                              <th className="border-r-2 border-black p-1 w-[5%]">COTAS</th>
-                              <th className="p-1 w-[15%]">JORNADA</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                        {rows.map((row, idx) => (
-                          <tr 
-                            key={idx} 
-                            className={cn(
-                              "border-x-2 border-b-2 border-black text-center group transition-colors",
-                              row.day % 2 === 0 ? "bg-blue-50/40" : "bg-red-50/40"
-                            )}
-                          >
-                            <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.graduacaoPosto || '#N/D'}</td>
-                            <td className="border-r-2 border-black py-0.5 font-bold">{row.pol?.matricula || '#N/D'}</td>
-                            <td className="border-r-2 border-black py-0.5 font-bold text-left px-2 uppercase">{row.pol?.nomeGuerra || ''}</td>
-                            <td className="border-r-2 border-black py-0.5 font-bold">9ª CIPM</td>
-                            <td className="border-r-2 border-black py-0.5 font-bold">{service.categoria || 'P.O'}</td>
-                            <td className="border-r-2 border-black py-0.5 font-black">{row.day}</td>
-                            <td className="border-r-2 border-black py-0.5 font-black">{row.pol ? '1' : ''}</td>
-                            <td className="font-bold py-0.5">{service.horarioInicio} as {service.horarioTermino} (12h)</td>
-                          </tr>
-                        ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-8">
-                              <td colSpan={6} className="p-1 text-center border-r-2 border-black uppercase">TOTAL</td>
-                              <td className="p-1 text-center bg-white border-r-2 border-black">{totalCotasValue}</td>
-                              <td className="bg-white"></td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                    </div>
-                  </div>
-                );
-              });
+                      </div>
+                    );
+                  })}
+                </div>
+              );
            })()}
         </div>
       ) : (
