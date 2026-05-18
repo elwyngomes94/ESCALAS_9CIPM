@@ -8,17 +8,20 @@ import {
   MapPin, 
   TrendingUp, 
   Briefcase,
+  ChevronLeft,
   ChevronRight,
   ShieldAlert,
-  BarChart4
+  BarChart4,
+  Download
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { format, isToday } from 'date-fns';
+import { format, isToday, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Tooltip, ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { cn } from '../lib/utils';
 
 export default function Dashboard() {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [stats, setStats] = useState({
     totalPolice: 0,
     activeScales: 0,
@@ -32,10 +35,11 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const monthKey = format(new Date(), 'yyyy-MM');
+  const monthKey = format(currentMonth, 'yyyy-MM');
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
         const [polySnap, escalaSnap, volSnap, serviceSnap, quotaSnap, logsSnap] = await Promise.all([
           getDocs(collection(db, 'policemen')),
@@ -95,7 +99,7 @@ export default function Dashboard() {
       }
     };
     fetchData();
-  }, []);
+  }, [monthKey]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -122,16 +126,34 @@ export default function Dashboard() {
       animate="visible"
       className="space-y-6"
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Painel de Comando</h1>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Visão geral do efetivo e escalas operacionais</p>
         </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-          <CalendarIcon className="w-4 h-4 text-pmpe-gold" />
-          <span className="text-[11px] font-black uppercase text-pmpe-navy">
-            {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-          </span>
+        
+        <div className="flex flex-wrap items-center gap-4">
+           {/* Month Navigator */}
+           <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+              <button 
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                className="p-1.5 hover:bg-slate-50 rounded-lg transition-all"
+              ><ChevronLeft className="w-4 h-4 text-pmpe-navy" /></button>
+              <div className="px-4 flex items-center min-w-[150px] justify-center">
+                 <span className="text-[10px] font-black uppercase tracking-widest text-pmpe-navy">{format(currentMonth, 'MMMM yyyy', { locale: ptBR })}</span>
+              </div>
+              <button 
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                className="p-1.5 hover:bg-slate-50 rounded-lg transition-all"
+              ><ChevronRight className="w-4 h-4 text-pmpe-navy" /></button>
+           </div>
+
+           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+              <CalendarIcon className="w-4 h-4 text-pmpe-gold" />
+              <span className="text-[11px] font-black uppercase text-pmpe-navy">
+                {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+              </span>
+           </div>
         </div>
       </div>
 
