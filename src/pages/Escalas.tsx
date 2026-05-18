@@ -65,8 +65,10 @@ const Escalas = () => {
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [scaleToPrint, setScaleToPrint] = useState<any>(null);
   
   const officialRef = useRef<HTMLDivElement>(null);
+  const printSingleRef = useRef<HTMLDivElement>(null);
 
   // Edit State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -122,44 +124,53 @@ const Escalas = () => {
     fetchData();
   }, [currentMonth]);
 
-  const exportToPDF = (esc: any) => {
-    const doc = new jsPDF();
-    const dateStr = format(esc.date.toDate(), 'dd/MM/yyyy');
+  const exportToPDF = async (esc: any) => {
+    setGeneratingReport(true);
+    // Setting scaleToPrint will trigger the hidden renderer
+    setScaleToPrint(esc);
     
-    doc.setFontSize(16);
-    doc.text(`Escala de Serviço - ${esc.service?.nome}`, 14, 20);
-    
-    doc.setFontSize(10);
-    doc.text(`Data: ${dateStr}`, 14, 30);
-    doc.text(`Local: ${esc.service?.cidade}`, 14, 35);
-    doc.text(`Horário: ${esc.service?.horarioInicio} - ${esc.service?.horarioTermino}`, 14, 40);
-    
-    const tableData = esc.policemen.map((p: any, idx: number) => {
-      let role = idx === 0 ? 'Comandante' : 'Patrulheiro';
-      if (p.isMotorista) role = 'Motorista';
-      return [
-        p.graduacaoPosto,
-        p.nomeGuerra,
-        p.matricula,
-        role,
-        p.telefone
-      ];
-    });
+    // Wait for the DOM to update
+    setTimeout(async () => {
+      try {
+        if (!printSingleRef.current) throw new Error("Renderizador não encontrado");
+        
+        const canvas = await html2canvas(printSingleRef.current, {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
 
-    autoTable(doc, {
-      startY: 50,
-      head: [['Posto/Grad', 'Nome de Guerra', 'Matrícula', 'Função', 'Telefone']],
-      body: tableData,
-    });
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        
+        const margin = 10;
+        const imgWidth = pageWidth - (margin * 2);
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        let finalHeight = imgHeight;
+        let finalWidth = imgWidth;
+        
+        if (imgHeight > pageHeight - (margin * 2)) {
+          finalHeight = pageHeight - (margin * 2);
+          finalWidth = (canvas.width * finalHeight) / canvas.height;
+        }
 
-    if (esc.observations) {
-      const finalY = (doc as any).lastAutoTable.finalY + 10;
-      doc.text('Observações:', 14, finalY);
-      doc.setFontSize(8);
-      doc.text(esc.observations, 14, finalY + 5, { maxWidth: 180 });
-    }
-
-    doc.save(`escala_${esc.service?.nome}_${dateStr}.pdf`);
+        const xPos = (pageWidth - finalWidth) / 2;
+        pdf.addImage(imgData, 'PNG', xPos, margin, finalWidth, finalHeight, undefined, 'FAST');
+        
+        const dateStr = format(esc.date.toDate(), 'dd_MM_yyyy');
+        pdf.save(`Escala_Oficial_9CIPM_${esc.service?.sigla || 'ESC'}_${dateStr}.pdf`);
+      } catch (err) {
+        console.error(err);
+        alert('Erro ao gerar PDF individual');
+      } finally {
+        setGeneratingReport(false);
+        setScaleToPrint(null);
+      }
+    }, 500);
   };
 
   const exportToExcel = (esc: any) => {
@@ -298,30 +309,55 @@ const Escalas = () => {
         return;
       }
 
+      // We use Landscape if the table is very wide, but military scales are usually Portrait
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
 
       for (let i = 0; i < tables.length; i++) {
         const table = tables[i] as HTMLElement;
+        
+        // Ensure background is solid white for the capture
+        const originalBg = table.style.backgroundColor;
+        table.style.backgroundColor = '#ffffff';
+
         const canvas = await html2canvas(table, {
-          scale: 2,
+          scale: 3, // Higher resolution for printing
           useCORS: true,
           logging: false,
-          backgroundColor: '#ffffff'
+          backgroundColor: '#ffffff',
+          windowWidth: 1200 // Force a consistent width for rendering
         });
 
-        const imgData = canvas.toDataURL('image/png');
-        const imgWidth = pageWidth - 20; // Margin
+        table.style.backgroundColor = originalBg;
+
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        const margin = 10;
+        const imgWidth = pageWidth - (margin * 2); 
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
         if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+        
+        // If the table is longer than a page, we might need to handle splitting, 
+        // but for monthly scales of 30 days they usually fit one A4 page at 12px font.
+        // If it overlaps, we scale it down slightly more.
+        let finalImgHeight = imgHeight;
+        let finalImgWidth = imgWidth;
+        
+        if (imgHeight > pageHeight - (margin * 2)) {
+           finalImgHeight = pageHeight - (margin * 2);
+           finalImgWidth = (canvas.width * finalImgHeight) / canvas.height;
+        }
+
+        const xPos = (pageWidth - finalImgWidth) / 2;
+
+        pdf.addImage(imgData, 'PNG', xPos, margin, finalImgWidth, finalImgHeight, undefined, 'FAST');
       }
 
-      pdf.save(`Escalas_Oficiais_${format(currentMonth, 'yyyy-MM')}.pdf`);
+      pdf.save(`Escala_Mensal_9CIPM_${format(currentMonth, 'MMMM_yyyy', { locale: ptBR })}.pdf`);
     } catch (err) {
       console.error(err);
-      alert('Erro ao gerar PDF');
+      alert('Erro ao gerar PDF: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setGeneratingReport(false);
     }
@@ -728,51 +764,58 @@ const Escalas = () => {
                     const totalCotasValue = rows.reduce((acc, row) => acc + (row.pol ? 1 : 0), 0);
 
                     return (
-                      <div key={service.id} className="official-report-table bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-200 rounded-[2px] overflow-x-auto relative">
+                      <div key={service.id} className="official-report-table bg-white p-6 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-200 rounded-[2px] overflow-x-auto relative mb-20 last:mb-0">
                         {/* Military Stamp Look */}
-                        <div className="absolute top-4 right-4 opacity-5 border-4 border-pmpe-navy p-2 rounded-xl rotate-12 pointer-events-none">
-                           <span className="text-2xl font-black text-pmpe-navy uppercase">9ª CIPM - OFICIAL</span>
+                        <div className="absolute top-10 right-10 opacity-10 border-4 border-pmpe-navy p-3 rounded-2xl rotate-12 pointer-events-none z-0">
+                           <span className="text-3xl font-black text-pmpe-navy uppercase">9ª CIPM - OFICIAL</span>
                         </div>
 
-                        <div className="min-w-[950px]">
+                        <div className="min-w-[950px] bg-white relative z-10">
                             {/* Header Section */}
-                            <div className="border-b-[4px] border-black pb-4 mb-4 flex items-center gap-6">
-                               <div className="w-20 h-20 flex-shrink-0">
-                                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Bras%C3%A3o_da_PMPE.svg/1200px-Bras%C3%A3o_da_PMPE.svg.png" alt="PMPE" className="w-full h-full object-contain" />
+                            <div className="border-b-[4px] border-black pb-6 mb-6 flex items-center gap-10">
+                               <div className="w-24 h-24 flex-shrink-0">
+                                  <img 
+                                    src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Bras%C3%A3o_da_PMPE.svg/1200px-Bras%C3%A3o_da_PMPE.svg.png" 
+                                    alt="PMPE" 
+                                    className="w-full h-full object-contain"
+                                    referrerPolicy="no-referrer"
+                                    crossOrigin="anonymous"
+                                  />
                                </div>
                                <div className="flex-1 text-center">
-                                  <h2 className="text-[16px] font-black text-black leading-tight uppercase tracking-tight">Polícia Militar de Pernambuco</h2>
-                                  <h3 className="text-[14px] font-bold text-black leading-tight uppercase">Diretoria de Planejamento Operacional</h3>
-                                  <h4 className="text-[14px] font-bold text-black leading-tight uppercase">9ª Companhia Independente da Polícia Militar - Araripina</h4>
+                                  <h1 className="text-[20px] font-black text-black leading-tight uppercase tracking-tight mb-1">Polícia Militar de Pernambuco</h1>
+                                  <h2 className="text-[16px] font-bold text-black leading-tight uppercase mb-0.5">PM/DPO - Diretoria de Planejamento Operacional</h2>
+                                  <h3 className="text-[16px] font-bold text-black leading-tight uppercase">9ª CIPM - Companhia Independente da Polícia Militar</h3>
+                                  <p className="text-[12px] font-bold text-slate-500 uppercase mt-1 tracking-widest">(Araripina - Pernambuco)</p>
                                </div>
-                               <div className="w-20 h-20 opacity-0 flex-shrink-0">PMPE</div>
+                               <div className="w-24 h-24 opacity-0 flex-shrink-0">PMPE</div>
                             </div>
 
                             <div 
-                              className="text-white font-black text-center py-3 border-x-2 border-t-2 border-black uppercase text-sm shadow-[inset_0_2px_15px_rgba(255,255,255,0.3)] relative overflow-hidden"
+                              className="text-white font-black text-center py-4 border-x-2 border-t-2 border-black uppercase text-base shadow-[inset_0_2px_20px_rgba(255,255,255,0.4)] relative overflow-hidden"
                               style={{ backgroundColor: service.color || '#1e293b' }}
                             >
-                              <div className="absolute inset-0 bg-black/10 mix-blend-overlay"></div>
+                              <div className="absolute inset-0 bg-black/15 mix-blend-overlay"></div>
                               ESCALA NOMINAL DO SERVIÇO: {service.nome} – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
                             </div>
                             
-                            <div className="bg-slate-100/80 text-black font-black text-center py-2 border-2 border-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-8">
-                              <span className="flex items-center gap-2"><MapPin className="w-3 h-3" /> LOCAL: {service.cidade}</span>
-                              <span className="flex items-center gap-2"><Clock className="w-3 h-3" /> HORÁRIO: {service.horarioInicio} AS {service.horarioTermino}</span>
-                              <span className="flex items-center gap-2"><Info className="w-3 h-3" /> MODALIDADE: {service.categoria || 'P.O'}</span>
+                            <div className="bg-slate-100 text-black font-black text-center py-3 border-2 border-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-12">
+                              <span className="flex items-center gap-2"><MapPin className="w-4 h-4 text-pmpe-navy" /> LOCAL: {service.cidade}</span>
+                              <span className="flex items-center gap-2"><Clock className="w-4 h-4 text-pmpe-navy" /> HORÁRIO: {service.horarioInicio} ÀS {service.horarioTermino}</span>
+                              <span className="flex items-center gap-2"><Info className="w-4 h-4 text-pmpe-navy" /> MODALIDADE: {service.categoria || 'P.O'}</span>
                             </div>
 
-                            <table className="w-full border-collapse border-b-2 border-black text-[11px]">
+                            <table className="w-full border-collapse border-b-2 border-black text-[12px]">
                               <thead>
-                                <tr className="bg-slate-50 font-black uppercase text-center border-x-2 border-black border-b border-black/40">
-                                  <th className="border-r-2 border-black py-3 px-1 w-[12%]">GRADUAÇÃO</th>
-                                  <th className="border-r-2 border-black py-3 px-1 w-[12%]">MATRÍCULA</th>
-                                  <th className="border-r-2 border-black py-3 px-1">NOME DE GUERRA</th>
-                                  <th className="border-r-2 border-black py-3 px-1 w-[10%]">OME</th>
-                                  <th className="border-r-2 border-black py-3 px-1 w-[10%]">FUNÇÃO</th>
-                                  <th className="border-r-2 border-black py-3 px-1 w-[6%]">DIA</th>
-                                  <th className="border-r-2 border-black py-3 px-1 w-[6%]">COTA</th>
-                                  <th className="py-3 px-1 w-[18%]">JORNADA DE TRABALHO</th>
+                                <tr className="bg-slate-50 font-black uppercase text-center border-x-2 border-black border-b border-black">
+                                  <th className="border-r-2 border-black py-4 px-1 w-[12%]">GRADUAÇÃO</th>
+                                  <th className="border-r-2 border-black py-4 px-1 w-[12%]">MATRÍCULA</th>
+                                  <th className="border-r-2 border-black py-4 px-1">NOME DE GUERRA</th>
+                                  <th className="border-r-2 border-black py-4 px-1 w-[12%] text-[10px]">ORGANIZAÇÃO (OME)</th>
+                                  <th className="border-r-2 border-black py-4 px-1 w-[10%]">FUNÇÃO</th>
+                                  <th className="border-r-2 border-black py-4 px-1 w-[6%]">DIA</th>
+                                  <th className="border-r-2 border-black py-4 px-1 w-[6%]">COTA</th>
+                                  <th className="py-4 px-1 w-[18%]">JORNADA</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -782,45 +825,49 @@ const Escalas = () => {
                                     <tr 
                                       key={idx} 
                                       className={cn(
-                                        "border-x-2 border-b border-black/20 text-center transition-colors font-mono",
+                                        "border-x-2 border-b border-black/30 text-center transition-colors font-mono",
                                         idx === rows.length - 1 && "border-b-2 border-black",
-                                        isWknd ? "bg-red-50/20" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"
+                                        isWknd ? "bg-red-50/30" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"
                                       )}
                                     >
-                                      <td className="border-r-2 border-black py-1 font-black text-slate-700">{row.pol?.graduacaoPosto || '---'}</td>
-                                      <td className="border-r-2 border-black py-1 font-black text-slate-700">{row.pol?.matricula || '---'}</td>
-                                      <td className="border-r-2 border-black py-1 font-black text-left px-4 uppercase text-pmpe-navy">{row.pol?.nomeGuerra || ''}</td>
-                                      <td className="border-r-2 border-black py-1 font-bold text-slate-500 text-[10px]">9ª CIPM</td>
-                                      <td className="border-r-2 border-black py-1 font-bold text-slate-500 text-[9px]">{service.categoria || 'P.O'}</td>
+                                      <td className="border-r-2 border-black py-2 font-black text-slate-800">{row.pol?.graduacaoPosto || '---'}</td>
+                                      <td className="border-r-2 border-black py-2 font-black text-slate-800">{row.pol?.matricula || '---'}</td>
+                                      <td className="border-r-2 border-black py-2 font-black text-left px-5 uppercase text-pmpe-navy">{row.pol?.nomeGuerra || ''}</td>
+                                      <td className="border-r-2 border-black py-2 font-bold text-slate-500 text-[11px]">9ª CIPM</td>
+                                      <td className="border-r-2 border-black py-2 font-bold text-slate-500 text-[10px]">{service.categoria || 'P.O'}</td>
                                       <td className={cn(
-                                        "border-r-2 border-black py-1 font-black text-[12px]",
-                                        isWknd ? "text-red-600" : "text-black"
-                                      )}>{row.day}</td>
-                                      <td className="border-r-2 border-black py-1 font-black text-slate-700">{row.pol ? '01' : '00'}</td>
-                                      <td className="font-bold py-1 text-slate-500 text-[10px]">{service.horarioInicio} às {service.horarioTermino} (12h)</td>
+                                        "border-r-2 border-black py-2 font-black text-[14px]",
+                                        isWknd ? "text-red-700 bg-red-50/50" : "text-black"
+                                      )}>{row.day.toString().padStart(2, '0')}</td>
+                                      <td className="border-r-2 border-black py-2 font-black text-slate-800">{row.pol ? '01' : '00'}</td>
+                                      <td className="font-bold py-2 text-slate-600 text-[11px]">{service.horarioInicio} às {service.horarioTermino}</td>
                                     </tr>
                                   );
                                 })}
                               </tbody>
                               <tfoot>
-                                <tr className="bg-slate-100 font-black border-x-2 border-b-2 border-black h-12">
-                                  <td colSpan={6} className="p-2 text-right pr-6 border-r-2 border-black uppercase text-xs tracking-widest">TOTAL DE COTAS DO SERVIÇO:</td>
-                                  <td className="p-2 text-center bg-white border-r-2 border-black text-lg text-pmpe-navy font-black shadow-inner">{totalCotasValue.toString().padStart(2, '0')}</td>
+                                <tr className="bg-slate-100 font-black border-x-2 border-b-2 border-black h-16">
+                                  <td colSpan={6} className="p-3 text-right pr-8 border-r-2 border-black uppercase text-sm tracking-[0.2em]">TOTAL DE COTAS DO MÊS:</td>
+                                  <td className="p-3 text-center bg-white border-r-2 border-black text-2xl text-pmpe-navy font-black shadow-inner">{totalCotasValue.toString().padStart(2, '0')}</td>
                                   <td className="bg-white"></td>
                                 </tr>
                               </tfoot>
                             </table>
 
                             {/* Signature Footer */}
-                            <div className="mt-12 grid grid-cols-2 gap-12 px-12 text-center">
-                               <div className="pt-8 border-t border-black">
-                                  <p className="text-[11px] font-black uppercase">P/3 - Chefe da Seção de Planejamento</p>
-                                  <p className="text-[10px] font-bold text-slate-400">9ª CIPM - Araripina</p>
+                            <div className="mt-16 grid grid-cols-2 gap-20 px-16 text-center">
+                               <div className="pt-10 border-t-2 border-black">
+                                  <p className="text-[13px] font-black uppercase mb-1">Chefe da Seção de Planejamento (P/3)</p>
+                                  <p className="text-[11px] font-bold text-slate-500 tracking-wider">9ª CIPM - ARARIPINA-PE</p>
                                </div>
-                               <div className="pt-8 border-t border-black">
-                                  <p className="text-[11px] font-black uppercase">Comandante da 9ª CIPM</p>
-                                  <p className="text-[10px] font-bold text-slate-400">9ª CIPM - Araripina</p>
+                               <div className="pt-10 border-t-2 border-black">
+                                  <p className="text-[13px] font-black uppercase mb-1">Comandante da 9ª CIPM</p>
+                                  <p className="text-[11px] font-bold text-slate-500 tracking-wider">9ª CIPM - ARARIPINA-PE</p>
                                </div>
+                            </div>
+
+                            <div className="mt-12 text-center text-[10px] font-bold text-slate-400 italic">
+                               Relatório gerado em {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} através do Sistema Integrado de Escalas (CIPM/9)
                             </div>
                         </div>
                       </div>
@@ -1256,6 +1303,91 @@ const Escalas = () => {
               });
             })()}
           </div>
+      </div>
+      {/* Hidden high-res renderer for individual PDF export */}
+      <div className="fixed top-[-9999px] left-[-9999px] pointer-events-none opacity-0">
+        {scaleToPrint && (
+          <div ref={printSingleRef} className="bg-white p-10 w-[950px] official-report-table">
+            <div className="border-b-[4px] border-black pb-8 mb-8 flex items-center gap-12">
+               <div className="w-28 h-28 flex-shrink-0">
+                  <img 
+                    src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Bras%C3%A3o_da_PMPE.svg/1200px-Bras%C3%A3o_da_PMPE.svg.png" 
+                    alt="PMPE" 
+                    className="w-full h-full object-contain"
+                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
+                  />
+               </div>
+               <div className="flex-1 text-center">
+                  <h1 className="text-[24px] font-black text-black leading-tight uppercase tracking-tight mb-2">Polícia Militar de Pernambuco</h1>
+                  <h2 className="text-[18px] font-bold text-black leading-tight uppercase mb-1">PM/DPO - Diretoria de Planejamento Operacional</h2>
+                  <h3 className="text-[18px] font-bold text-black leading-tight uppercase">9ª CIPM - Companhia Independente da Polícia Militar</h3>
+                  <p className="text-[14px] font-bold text-slate-500 uppercase mt-2 tracking-widest">(Araripina - Pernambuco)</p>
+               </div>
+               <div className="w-28 h-28 opacity-0">PMPE</div>
+            </div>
+
+            <div 
+              className="text-white font-black text-center py-5 border-x-2 border-t-2 border-black uppercase text-lg shadow-inner relative overflow-hidden"
+              style={{ backgroundColor: scaleToPrint.service?.color || '#1e293b' }}
+            >
+              ESCALA NOMINAL DO SERVIÇO: {scaleToPrint.service?.nome}
+            </div>
+            
+            <div className="bg-slate-50 text-black font-black text-center py-4 border-2 border-black uppercase text-[12px] tracking-[0.3em] flex items-center justify-center gap-16">
+              <span className="flex items-center gap-2"><MapPin className="w-5 h-5 text-pmpe-navy" /> LOCAL: {scaleToPrint.service?.cidade}</span>
+              <span className="flex items-center gap-2"><Clock className="w-5 h-5 text-pmpe-navy" /> {format(scaleToPrint.date.toDate(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</span>
+              <span className="flex items-center gap-2"><Info className="w-5 h-5 text-pmpe-navy" /> {scaleToPrint.service?.horarioInicio} ÀS {scaleToPrint.service?.horarioTermino}</span>
+            </div>
+
+            <table className="w-full border-collapse border-b-2 border-black text-[14px]">
+              <thead>
+                <tr className="bg-slate-100 font-black uppercase text-center border-x-2 border-black border-b border-black">
+                  <th className="border-r-2 border-black py-5 px-2 w-[15%]">GRADUAÇÃO</th>
+                  <th className="border-r-2 border-black py-5 px-2 w-[15%]">MATRÍCULA</th>
+                  <th className="border-r-2 border-black py-5 px-2">NOME DE GUERRA</th>
+                  <th className="border-r-2 border-black py-5 px-2 w-[12%]">OME</th>
+                  <th className="border-r-2 border-black py-5 px-2 w-[12%]">FUNÇÃO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scaleToPrint.policemen?.map((pol: any, idx: number) => (
+                  <tr key={idx} className="border-x-2 border-b border-black/30 text-center font-mono">
+                    <td className="border-r-2 border-black py-3 font-black">{pol.graduacaoPosto}</td>
+                    <td className="border-r-2 border-black py-3 font-black">{pol.matricula}</td>
+                    <td className="border-r-2 border-black py-3 font-black text-left px-8 uppercase text-pmpe-navy">{pol.nomeGuerra}</td>
+                    <td className="border-r-2 border-black py-3 font-bold text-slate-500">9ª CIPM</td>
+                    <td className="border-r-2 border-black py-3 font-black">
+                      {idx === 0 ? 'CMDT' : pol.isMotorista ? 'MOT' : 'PATRUL.'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {scaleToPrint.observations && (
+              <div className="mt-8 p-6 bg-slate-50 border-2 border-black rounded-lg">
+                <p className="text-[11px] font-black uppercase mb-2 tracking-widest text-pmpe-navy">Observações Específicas do Serviço:</p>
+                <p className="text-[14px] leading-relaxed text-slate-800 font-medium whitespace-pre-wrap">{scaleToPrint.observations}</p>
+              </div>
+            )}
+
+            <div className="mt-24 grid grid-cols-2 gap-24 px-12 text-center">
+               <div className="pt-12 border-t-2 border-black">
+                  <p className="text-[14px] font-black uppercase text-black">Chefe da Seção de Planejamento (P/3)</p>
+                  <p className="text-[12px] font-black text-slate-400">9ª CIPM - ARARIPINA-PE</p>
+               </div>
+               <div className="pt-12 border-t-2 border-black">
+                  <p className="text-[14px] font-black uppercase text-black">Comandante da 9ª CIPM</p>
+                  <p className="text-[12px] font-black text-slate-400">9ª CIPM - ARARIPINA-PE</p>
+               </div>
+            </div>
+
+            <div className="mt-16 text-center text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">
+               Policia Militar de Pernambuco - Valorizamos a Nossa Gente
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
