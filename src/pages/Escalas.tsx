@@ -338,9 +338,6 @@ const Escalas = () => {
 
         if (i > 0) pdf.addPage();
         
-        // If the table is longer than a page, we might need to handle splitting, 
-        // but for monthly scales of 30 days they usually fit one A4 page at 12px font.
-        // If it overlaps, we scale it down slightly more.
         let finalImgHeight = imgHeight;
         let finalImgWidth = imgWidth;
         
@@ -361,10 +358,6 @@ const Escalas = () => {
     } finally {
       setGeneratingReport(false);
     }
-  };
-
-  const shareBatchWhatsApp = () => {
-    // ... removed or repurposed ...
   };
 
   const shareOfficialWhatsApp = () => {
@@ -738,90 +731,106 @@ const Escalas = () => {
                 </div>
               );
 
-              return (
-                <div className="space-y-12" ref={officialRef}>
-                  {filteredServices.map(service => {
-                    const serviceScales = escalas.filter(e => 
-                      e.serviceTypeId === service.id && 
-                      e.date.toDate() >= monthStart && e.date.toDate() <= monthEnd
-                    ).sort((a, b) => a.date.toDate().getTime() - b.date.toDate().getTime());
-                    
-                    const rows: any[] = [];
-                    serviceScales.forEach(esc => {
-                      esc.policemen?.forEach(p => {
-                        rows.push({ 
-                          day: getDate(esc.date.toDate()), 
-                          pol: p, 
-                          esc, 
-                          date: esc.date.toDate(),
-                          jornada: `${service.horarioInicio} as ${service.horarioTermino}`
+              const pjesServices = filteredServices.filter(s => s.tipo === 'PJES');
+              const opsServices = filteredServices.filter(s => s.tipo === 'OPS');
+
+              const renderServiceGroup = (typeLabel: string, servicesList: any[]) => {
+                if (servicesList.length === 0) return null;
+                return (
+                  <div className="space-y-12 mb-20 last:mb-0">
+                    <div className="flex items-center gap-6 px-4 mb-12">
+                      <div className="h-[3px] flex-1 bg-gradient-to-r from-transparent via-slate-200 to-slate-200 rounded-full"></div>
+                      <h2 className="text-[14px] font-black text-pmpe-navy uppercase tracking-[0.5em] whitespace-nowrap bg-white px-6 py-2 border-2 border-slate-100 rounded-full shadow-sm">{typeLabel}</h2>
+                      <div className="h-[3px] flex-1 bg-gradient-to-l from-transparent via-slate-200 to-slate-200 rounded-full"></div>
+                    </div>
+                    {servicesList.map(service => {
+                      const serviceScales = escalas.filter(e => 
+                        e.serviceTypeId === service.id && 
+                        e.date.toDate() >= monthStart && e.date.toDate() <= monthEnd
+                      ).sort((a, b) => a.date.toDate().getTime() - b.date.toDate().getTime());
+                      
+                      const rows: any[] = [];
+                      serviceScales.forEach(esc => {
+                        esc.policemen?.forEach(p => {
+                          rows.push({ 
+                            day: getDate(esc.date.toDate()), 
+                            pol: p, 
+                            esc, 
+                            date: esc.date.toDate(),
+                            jornada: `${service.horarioInicio} as ${service.horarioTermino}`
+                          });
                         });
                       });
-                    });
 
-                    const totalCotasValue = rows.length;
+                      const totalCotasValue = rows.length;
 
-                    return (
-                      <div key={service.id} className="official-report-table bg-white p-1 shadow-2xl border-2 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
-                        <div className="min-w-[900px]">
-                            {/* Main Header */}
-                            <div 
-                              className="text-black font-black text-center py-3 border-2 border-black uppercase text-base"
-                              style={{ backgroundColor: '#f28c28' }}
-                            >
-                              ESCALA {service.nome} – 9ª CIPM – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-                            </div>
-                            
-                            {/* Sub Header */}
-                            <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[11px] tracking-widest">
-                              LOCAL: {service.cidade} – {service.horarioInicio} AS {service.horarioTermino}
-                            </div>
+                      return (
+                        <div key={service.id} className="official-report-table bg-white p-1 shadow-2xl border-2 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
+                          <div className="min-w-[900px]">
+                              <div 
+                                className="text-black font-black text-center py-3 border-2 border-black uppercase text-base"
+                                style={{ backgroundColor: '#f28c28' }}
+                              >
+                                ESCALA {service.nome} – 9ª CIPM – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                              </div>
+                              
+                              <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[11px] tracking-widest">
+                                LOCAL: {service.cidade} – {service.horarioInicio} AS {service.horarioTermino}
+                              </div>
 
-                            <table className="w-full border-collapse text-[11px]">
-                              <thead>
-                                <tr className="bg-white font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
-                                  <th className="border-r-2 border-black py-2 px-1 w-[12%]">GRADUAÇÃO</th>
-                                  <th className="border-r-2 border-black py-2 px-1 w-[12%]">MATRÍCULA</th>
-                                  <th className="border-r-2 border-black py-2 px-1">NOME DE GUERRA</th>
-                                  <th className="border-r-2 border-black py-2 px-1 w-[10%]">OME</th>
-                                  <th className="border-r-2 border-black py-2 px-1 w-[10%]">FUNÇÃO</th>
-                                  <th className="border-r-2 border-black py-2 px-1 w-[6%]">DIAS</th>
-                                  <th className="border-r-2 border-black py-2 px-1 w-[6%]">COTAS</th>
-                                  <th className="py-2 px-1 w-[18%]">JORNADA</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {rows.map((row, idx) => (
-                                  <tr 
-                                    key={idx} 
-                                    className="border-x-2 border-b-2 border-black text-center font-black"
-                                    style={{ 
-                                      backgroundColor: idx % 2 === 0 ? '#f28c28' : '#ffffff',
-                                      color: idx % 2 === 0 ? '#000000' : '#000000'
-                                    }}
-                                  >
-                                    <td className="border-r-2 border-black py-1.5">{row.pol?.graduacaoPosto}</td>
-                                    <td className="border-r-2 border-black py-1.5">{row.pol?.matricula}</td>
-                                    <td className="border-r-2 border-black py-1.5 uppercase px-2">{row.pol?.nomeGuerra}</td>
-                                    <td className="border-r-2 border-black py-1.5">9ª CIPM</td>
-                                    <td className="border-r-2 border-black py-1.5">{service.categoria || 'P.O'}</td>
-                                    <td className="border-r-2 border-black py-1.5 text-lg">{row.day}</td>
-                                    <td className="border-r-2 border-black py-1.5 text-lg">1</td>
-                                    <td className="py-1.5">{row.jornada} (12h)</td>
+                              <table className="w-full border-collapse text-[11px]">
+                                <thead>
+                                  <tr className="bg-white font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
+                                    <th className="border-r-2 border-black py-2 px-1 w-[12%]">GRADUAÇÃO</th>
+                                    <th className="border-r-2 border-black py-2 px-1 w-[12%]">MATRÍCULA</th>
+                                    <th className="border-r-2 border-black py-2 px-1">NOME DE GUERRA</th>
+                                    <th className="border-r-2 border-black py-2 px-1 w-[10%]">OME</th>
+                                    <th className="border-r-2 border-black py-2 px-1 w-[10%]">FUNÇÃO</th>
+                                    <th className="border-r-2 border-black py-2 px-1 w-[6%]">DIAS</th>
+                                    <th className="border-r-2 border-black py-2 px-1 w-[6%]">COTAS</th>
+                                    <th className="py-2 px-1 w-[18%]">JORNADA</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                              <tfoot>
-                                <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-12">
-                                  <td colSpan={6} className="p-2 text-center border-r-2 border-black uppercase text-sm">TOTAL</td>
-                                  <td colSpan={2} className="p-2 text-center text-xl bg-white">{totalCotasValue}</td>
-                                </tr>
-                              </tfoot>
-                            </table>
+                                </thead>
+                                <tbody>
+                                  {rows.map((row, idx) => (
+                                    <tr 
+                                      key={idx} 
+                                      className="border-x-2 border-b-2 border-black text-center font-black"
+                                      style={{ 
+                                        backgroundColor: idx % 2 === 0 ? '#f28c28' : '#ffffff',
+                                        color: '#000000'
+                                      }}
+                                    >
+                                      <td className="border-r-2 border-black py-1.5">{row.pol?.graduacaoPosto}</td>
+                                      <td className="border-r-2 border-black py-1.5">{row.pol?.matricula}</td>
+                                      <td className="border-r-2 border-black py-1.5 uppercase px-2">{row.pol?.nomeGuerra}</td>
+                                      <td className="border-r-2 border-black py-1.5">9ª CIPM</td>
+                                      <td className="border-r-2 border-black py-1.5">{service.categoria || 'P.O'}</td>
+                                      <td className="border-r-2 border-black py-1.5 text-lg">{row.day}</td>
+                                      <td className="border-r-2 border-black py-1.5 text-lg">1</td>
+                                      <td className="py-1.5">{row.jornada} (12h)</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-12">
+                                    <td colSpan={6} className="p-2 text-center border-r-2 border-black uppercase text-sm">TOTAL</td>
+                                    <td colSpan={2} className="p-2 text-center text-xl bg-white">{totalCotasValue}</td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                );
+              };
+
+              return (
+                <div className="space-y-4" ref={officialRef}>
+                  {renderServiceGroup('ESCALAS PJES', pjesServices)}
+                  {renderServiceGroup('ESCALAS OPS', opsServices)}
                 </div>
               );
            })()}
@@ -945,7 +954,7 @@ const Escalas = () => {
                     exit={{ height: 0 }}
                     className="bg-slate-50/50 border-t border-slate-100 overflow-hidden"
                   >
-                    <div className="p-4 space-y-4">
+                    <div className="p-4 sm:p-6">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="md:col-span-2 space-y-2">
                              <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 ml-1">
@@ -1164,86 +1173,95 @@ const Escalas = () => {
             style={{ width: '210mm' }}
           >
             {(() => {
+              const monthStart = startOfMonth(currentMonth);
+              const monthEnd = endOfMonth(currentMonth);
               const reportScales = getReportScales();
-              // Group scales by service to create one table per service
-              const serviceIds = Array.from(new Set(reportScales.map(e => e.serviceTypeId)));
               
-              if (serviceIds.length === 0) return <div className="text-center p-20 uppercase font-black opacity-20">Nenhuma escala para o período</div>;
+              const filteredServices = services.filter(s => {
+                const isCorrectMonth = s.month === format(currentMonth, 'yyyy-MM');
+                const isSelected = selectedServiceId ? s.id === selectedServiceId : true;
+                return isCorrectMonth && isSelected;
+              });
 
-              return serviceIds.map(sid => {
-                const service = services.find(s => s.id === sid);
-                const serviceScales = reportScales.filter(e => e.serviceTypeId === sid);
+              // Group by PJES and OPS for the PDF as well if needed, 
+              // but usually the batch export handles each table separately anyway.
+              
+              if (filteredServices.length === 0) return <div className="text-center p-20 uppercase font-black opacity-20">Nenhuma escala para o período</div>;
+
+              return filteredServices.map(service => {
+                const serviceScales = reportScales.filter(e => e.serviceTypeId === service.id);
                 const configDateObj = currentMonth;
                 const monthDays = eachDayOfInterval({
                   start: startOfMonth(configDateObj),
                   end: endOfMonth(configDateObj)
                 });
 
-                // Prepare data for the table
-                // If multiple people per day, we need multiple rows for that day
                 const rows: any[] = [];
                 monthDays.forEach(day => {
                   const dayScales = serviceScales.filter(e => isSameDay(e.date.toDate(), day));
                   const dayNum = parseInt(format(day, 'd'));
-                  if (dayScales.length === 0) {
-                    rows.push({ day: dayNum, pol: null });
-                  } else {
+                  if (dayScales.length > 0) {
                     dayScales.forEach(esc => {
                       esc.policemen?.forEach(p => {
-                        rows.push({ day: dayNum, pol: p, esc });
+                        rows.push({ 
+                            day: dayNum, 
+                            pol: p, 
+                            esc,
+                            jornada: `${service.horarioInicio} as ${service.horarioTermino}`
+                        });
                       });
                     });
                   }
                 });
 
-                const totalCotas = rows.reduce((acc, row) => acc + (row.pol ? 1 : 0), 0);
+                const totalCotas = rows.length;
 
                 return (
-                  <div key={sid} className="mb-12 page-break-after-always official-report-table">
-                    <div className="bg-[#f28c28] text-black font-black text-center py-1 border-2 border-black uppercase text-sm mb-0">
-                      ESCALA {service?.nome} – 9ª CIPM – {format(configDateObj, 'MMMM yyyy', { locale: ptBR })}
+                  <div key={service.id} className="mb-12 page-break-after-always official-report-table">
+                    <div className="bg-[#f28c28] text-black font-black text-center py-2 border-2 border-black uppercase text-sm mb-0">
+                      ESCALA {service.nome} – 9ª CIPM – {format(configDateObj, 'MMMM yyyy', { locale: ptBR })}
                     </div>
-                    <div className="bg-[#dcdcdc] text-black font-black text-center py-0.5 border-x-2 border-b-2 border-black uppercase text-[10px] mb-0">
-                      LOCAL: {service?.cidade} – {service?.horarioInicio} AS {service?.horarioTermino}
+                    <div className="bg-[#dcdcdc] text-black font-black text-center py-1 border-x-2 border-b-2 border-black uppercase text-[10px] mb-0 tracking-widest">
+                      LOCAL: {service.cidade} – {service.horarioInicio} AS {service.horarioTermino}
                     </div>
                     <table className="w-full border-collapse border-b-2 border-black text-[9px]">
                       <thead>
-                        <tr className="bg-white font-black uppercase text-center border-x-2 border-black">
-                          <th className="border-r-2 border-black p-1 w-20">GRADUAÇÃO</th>
-                          <th className="border-r-2 border-black p-1 w-20">MATRÍCULA</th>
+                        <tr className="bg-white font-black uppercase text-center border-x-2 border-black border-b-2 border-black h-10">
+                          <th className="border-r-2 border-black p-1 w-[12%]">GRADUAÇÃO</th>
+                          <th className="border-r-2 border-black p-1 w-[12%]">MATRÍCULA</th>
                           <th className="border-r-2 border-black p-1">NOME DE GUERRA</th>
-                          <th className="border-r-2 border-black p-1 w-20">OME</th>
-                          <th className="border-r-2 border-black p-1 w-20">FUNÇÃO</th>
-                          <th className="border-r-2 border-black p-1 w-10">DIAS</th>
-                          <th className="border-r-2 border-black p-1 w-10">COTAS</th>
-                          <th className="p-1 w-32">JORNADA</th>
+                          <th className="border-r-2 border-black p-1 w-[10%]">OME</th>
+                          <th className="border-r-2 border-black p-1 w-[10%]">FUNÇÃO</th>
+                          <th className="border-r-2 border-black p-1 w-[6%]">DIAS</th>
+                          <th className="border-r-2 border-black p-1 w-[6%]">COTAS</th>
+                          <th className="p-1 w-[18%]">JORNADA</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.map((row, idx) => (
                           <tr 
                             key={idx} 
-                            className={cn(
-                              "border-x-2 border-b-2 border-black text-center h-5",
-                              row.day % 2 === 0 ? "bg-[#e0f2fe]" : "bg-[#fee2e2]"
-                            )}
+                            className="border-x-2 border-b-2 border-black text-center h-8 font-black"
+                            style={{ 
+                                backgroundColor: idx % 2 === 0 ? '#f28c28' : '#ffffff',
+                                color: '#000000'
+                            }}
                           >
-                            <td className="border-r-2 border-black font-bold">{row.pol?.graduacaoPosto || '#N/D'}</td>
-                            <td className="border-r-2 border-black font-bold">{row.pol?.matricula || '#N/D'}</td>
-                            <td className="border-r-2 border-black font-bold text-left px-2 uppercase truncate max-w-[150px]">{row.pol?.nomeGuerra || ''}</td>
-                            <td className="border-r-2 border-black font-bold">9ª CIPM</td>
-                            <td className="border-r-2 border-black font-bold">{service?.categoria || 'P.O'}</td>
-                            <td className="border-r-2 border-black font-black">{row.day}</td>
-                            <td className="border-r-2 border-black font-black">{row.pol ? '1' : ''}</td>
-                            <td className="font-bold text-[8px]">{service?.horarioInicio} as {service?.horarioTermino} (12h)</td>
+                            <td className="border-r-2 border-black">{row.pol?.graduacaoPosto}</td>
+                            <td className="border-r-2 border-black">{row.pol?.matricula}</td>
+                            <td className="border-r-2 border-black px-2 uppercase">{row.pol?.nomeGuerra}</td>
+                            <td className="border-r-2 border-black">9ª CIPM</td>
+                            <td className="border-r-2 border-black">{service.categoria || 'P.O'}</td>
+                            <td className="border-r-2 border-black text-base">{row.day}</td>
+                            <td className="border-r-2 border-black text-base">1</td>
+                            <td className="">{row.jornada} (12h)</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
-                        <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black">
-                          <td colSpan={6} className="p-1 text-center border-r-2 border-black">TOTAL</td>
-                          <td className="p-1 text-center">{totalCotas}</td>
-                          <td></td>
+                        <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-10">
+                          <td colSpan={6} className="p-1 text-center border-r-2 border-black uppercase">TOTAL</td>
+                          <td colSpan={2} className="p-1 text-center text-lg bg-white">{totalCotas}</td>
                         </tr>
                       </tfoot>
                     </table>
