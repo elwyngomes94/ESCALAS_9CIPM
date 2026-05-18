@@ -22,7 +22,8 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     totalPolice: 0,
     activeScales: 0,
-    volunteersMonth: 0,
+    volunteersPJES: 0,
+    volunteersOPS: 0,
     usedPjes: 0,
     usedOps: 0
   });
@@ -60,12 +61,15 @@ export default function Dashboard() {
           if (log.tipo === 'OPS') ops += log.quantidade;
         });
 
-        const totalPjesLimit = (quotas?.pjesMPTotal || 0) + (quotas?.pjesForumTotal || 0) + (quotas?.pjesEscolarTotal || 0) + (quotas?.pjesDecretoTotal || 0);
+        const volunteers = volSnap.docs.map(d => d.data() as Volunteer);
+        const volPJES = volunteers.filter(v => v.type === 'PJES').length;
+        const volOPS = volunteers.filter(v => v.type === 'OPS').length;
 
         setStats({
           totalPolice: polySnap.size,
           activeScales: allEscalas.filter(e => isToday(e.date.toDate())).length,
-          volunteersMonth: volSnap.size,
+          volunteersPJES: volPJES,
+          volunteersOPS: volOPS,
           usedPjes: pjes,
           usedOps: ops
         });
@@ -131,7 +135,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard 
           icon={Users} 
           label="Efetivo Total" 
@@ -140,25 +144,32 @@ export default function Dashboard() {
           color="bg-pmpe-navy"
         />
         <StatCard 
-          icon={CalendarIcon} 
-          label="Escalas Hoje" 
-          value={stats.activeScales.toString()} 
-          sub="Serviços em Andamento"
-          color="bg-emerald-600"
+          icon={TrendingUp} 
+          label="Voluntários PJES" 
+          value={stats.volunteersPJES.toString()} 
+          sub="Solicitações PJES"
+          color="bg-pmpe-gold"
         />
         <StatCard 
           icon={TrendingUp} 
-          label="Voluntários" 
-          value={stats.volunteersMonth.toString()} 
-          sub="Mês Corrente"
-          color="bg-pmpe-gold"
+          label="Voluntários OPS" 
+          value={stats.volunteersOPS.toString()} 
+          sub="Solicitações OPS"
+          color="bg-amber-600"
         />
         <StatCard 
           icon={ShieldAlert} 
           label="Cotas PJES" 
           value={`${stats.usedPjes}/${(quotas?.pjesMPTotal || 0) + (quotas?.pjesForumTotal || 0) + (quotas?.pjesEscolarTotal || 0) + (quotas?.pjesDecretoTotal || 0) || 0}`} 
-          sub="Consumo Mensal"
+          sub="Used / Total PJES"
           color="bg-rose-600"
+        />
+        <StatCard 
+          icon={ShieldAlert} 
+          label="Cotas OPS" 
+          value={`${stats.usedOps}/${quotas?.opsTotal || 0}`} 
+          sub="Used / Total OPS"
+          color="bg-orange-600"
         />
       </div>
 
