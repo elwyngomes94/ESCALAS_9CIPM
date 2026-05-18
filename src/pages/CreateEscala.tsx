@@ -574,19 +574,19 @@ const CreateEscala = () => {
           <div className="flex-1 bg-white rounded-[32px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col relative">
             
             <div className="flex-1 overflow-auto custom-matrix-scroll p-1">
-              <table className="w-full border-separate border-spacing-0 text-[10px] font-sans">
+              <table className="w-full border-separate border-spacing-0 text-[11px] font-sans">
                 <thead className="sticky top-0 z-[20]">
-                  <tr className="bg-pmpe-navy text-white h-14">
+                  <tr className="bg-pmpe-navy text-white h-16">
                     {/* Fixed Columns Headers */}
-                    <th className="sticky left-0 z-30 p-2 min-w-[48px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black">GRA.</th>
-                    <th className="sticky left-[48px] z-30 p-2 min-w-[70px] bg-pmpe-navy text-center font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">MAT.</th>
-                    <th className="sticky left-[118px] z-30 p-4 min-w-[150px] bg-pmpe-navy text-left font-black uppercase text-[8px] border-b-2 border-black border-l-2 border-black">EFETIVO</th>
+                    <th className="sticky left-0 z-30 p-3 min-w-[60px] bg-pmpe-navy text-center font-black uppercase text-[10px] border-b-2 border-black">GRA.</th>
+                    <th className="sticky left-[60px] z-30 p-3 min-w-[90px] bg-pmpe-navy text-center font-black uppercase text-[10px] border-b-2 border-black border-l-2 border-black">MAT.</th>
+                    <th className="sticky left-[150px] z-30 p-4 min-w-[200px] bg-pmpe-navy text-left font-black uppercase text-[10px] border-b-2 border-black border-l-2 border-black uppercase tracking-wider">EFETIVO</th>
                     
                     {/* Stats Columns Headers */}
-                    <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">SOLIC.</th>
-                    <th className="p-2 min-w-[48px] bg-pmpe-gold text-pmpe-navy font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">DISP.</th>
-                    <th className="p-2 min-w-[48px] bg-emerald-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">ESCAL.</th>
-                    <th className="p-2 min-w-[48px] bg-rose-600 font-black text-[7px] uppercase border-b-2 border-black text-center tracking-tighter">A ESC.</th>
+                    <th className="p-3 min-w-[60px] bg-pmpe-gold text-pmpe-navy font-black text-[9px] uppercase border-b-2 border-black text-center tracking-tighter">SOLIC.</th>
+                    <th className="p-3 min-w-[60px] bg-pmpe-gold text-pmpe-navy font-black text-[9px] uppercase border-b-2 border-black text-center tracking-tighter">DISP.</th>
+                    <th className="p-3 min-w-[60px] bg-emerald-600 font-black text-[9px] uppercase border-b-2 border-black text-center tracking-tighter">ESCAL.</th>
+                    <th className="p-3 min-w-[60px] bg-rose-600 font-black text-[9px] uppercase border-b-2 border-black text-center tracking-tighter">A ESC.</th>
                     
                     {/* Days Multi-Column (Matrix) */}
                     {days.map(day => {
@@ -595,13 +595,13 @@ const CreateEscala = () => {
                         <th 
                           key={day.toISOString()} 
                           className={cn(
-                            "min-w-[42px] p-1 border-b-2 border-black border-l-2 border-black text-center transition-colors",
+                            "min-w-[50px] p-2 border-b-2 border-black border-l-2 border-black text-center transition-colors",
                             isWknd ? "bg-red-600" : "bg-blue-700 hover:bg-blue-800"
                           )}
                         >
                            <div className="flex flex-col items-center">
-                              <span className="text-[6px] font-black opacity-60 mb-0.5 leading-none uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
-                              <span className="text-[11px] font-black leading-none">{format(day, 'dd')}</span>
+                              <span className="text-[7px] font-bold opacity-80 mb-0.5 leading-none uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
+                              <span className="text-[14px] font-black leading-none">{format(day, 'dd')}</span>
                            </div>
                         </th>
                       );
@@ -626,20 +626,20 @@ const CreateEscala = () => {
                     const remaining = solicted - scaledCount;
 
                     return (
-                      <tr key={v.id} className="h-10 hover:bg-slate-50 transition-colors group">
+                      <tr key={v.id} className="h-12 hover:bg-slate-50 transition-colors group">
                         {/* Fixed ID Info */}
-                        <td className="sticky left-0 z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-black text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
-                        <td className="sticky left-[48px] z-10 p-2 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-400 border-r-2 border-b-2 border-black">{v.policeman?.matricula}</td>
-                        <td className="sticky left-[118px] z-10 p-2 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-4 border-r-2 border-b-2 border-black truncate">
+                        <td className="sticky left-0 z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-black text-slate-500 border-r-2 border-b-2 border-black">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
+                        <td className="sticky left-[60px] z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-500 border-r-2 border-b-2 border-black">{v.policeman?.matricula}</td>
+                        <td className="sticky left-[150px] z-10 p-3 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-5 border-r-2 border-b-2 border-black truncate">
                            {v.policeman?.nomeGuerra}
                         </td>
 
                         {/* Stats Dynamic Columns */}
-                        <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r-2 border-b-2 border-black">{solicted}</td>
-                        <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r-2 border-b-2 border-black">{days.length - (ordinarySchedules[v.policemanId]?.length || 0)}</td>
-                        <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r-2 border-b-2 border-black">{scaledCount}</td>
+                        <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r-2 border-b-2 border-black text-[12px]">{solicted}</td>
+                        <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r-2 border-b-2 border-black text-[12px]">{days.length - (ordinarySchedules[v.policemanId]?.length || 0)}</td>
+                        <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r-2 border-b-2 border-black text-[12px]">{scaledCount}</td>
                         <td className={cn(
-                          "text-center font-black border-r-2 border-b-2 border-black",
+                          "text-center font-black border-r-2 border-b-2 border-black text-[12px]",
                           remaining > 0 ? "bg-rose-50/50 text-rose-600" : "bg-emerald-50 text-emerald-500"
                         )}>{remaining}</td>
 
@@ -751,7 +751,7 @@ const CreateEscala = () => {
                                 }
                               }}
                               className={cn(
-                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-12 w-12",
+                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-14 w-14",
                                 !isOrd ? "cursor-pointer" : "bg-slate-800",
                                 scales.length === 0 && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
                                 selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? (
@@ -762,7 +762,7 @@ const CreateEscala = () => {
                                 isSubmittingThisCell ? "bg-amber-100" : ""
                               )}
                             >
-                               <div className="w-full h-full flex flex-col items-stretch justify-center font-black text-[8px] uppercase tracking-tighter overflow-hidden">
+                               <div className="w-full h-full flex flex-col items-stretch justify-center font-black text-[9px] uppercase tracking-tighter overflow-hidden">
                                   {isSubmittingThisCell && scales.length === 0 ? (
                                     <div className="flex items-center justify-center h-full">
                                       <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -778,8 +778,8 @@ const CreateEscala = () => {
                                           style={{ backgroundColor: s.service?.color || '#334155' }}
                                         >
                                           <div className="flex flex-col items-center justify-center text-center w-full min-h-0">
-                                             <span className="text-[7px] font-black leading-tight tracking-tighter">{s.service?.sigla || 'ESC'}</span>
-                                             <span className="text-[5px] font-black opacity-90 leading-none truncate w-full px-0.5 mt-0.5 uppercase">{s.service?.nome}</span>
+                                             <span className="text-[8px] font-black leading-tight tracking-tighter">{s.service?.sigla || 'ESC'}</span>
+                                             <span className="text-[6px] font-black opacity-90 leading-none truncate w-full px-0.5 mt-0.5 uppercase">{s.service?.nome}</span>
                                           </div>
                                           {s.service?.vagasNecessarias && s.policemenIds.length >= s.service.vagasNecessarias && (
                                             <div className="absolute top-0 right-0 p-0.5">
@@ -795,16 +795,16 @@ const CreateEscala = () => {
                                       )}
                                     </div>
                                   ) : isOrd ? (
-                                    <span className="text-white/30 text-[7px] font-black">ORD</span>
+                                    <span className="text-white/30 text-[8px] font-black">ORD</span>
                                   ) : isFull && selectedServiceId ? (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-rose-50/50">
-                                      <span className="text-[7px] text-rose-500 font-black leading-none mb-0.5">LOTADO</span>
-                                      <span className="text-[9px] font-black text-rose-600">{slotsUsed}/{slotsMax}</span>
+                                      <span className="text-[8px] text-rose-500 font-black leading-none mb-0.5">LOTADO</span>
+                                      <span className="text-[10px] font-black text-rose-600">{slotsUsed}/{slotsMax}</span>
                                     </div>
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center group-matrix-cell">
                                        <span className={cn(
-                                          "text-[10px] font-bold transition-all",
+                                          "text-[12px] font-bold transition-all",
                                           selectedServiceId && isServiceActiveOnThisDay ? "text-emerald-600 animate-pulse scale-150" : "text-slate-300"
                                        )}>0</span>
                                     </div>
