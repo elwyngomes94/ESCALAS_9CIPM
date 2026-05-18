@@ -8,7 +8,8 @@ import {
   doc, 
   query, 
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  where
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { ServiceType } from '../types';
@@ -27,10 +28,12 @@ import {
   Clock,
   Info,
   Calendar as CalendarIcon,
-  Users
+  Users,
+  Download,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, parseISO, getDate } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, parseISO, getDate, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const ServiceTypes = () => {
@@ -40,6 +43,10 @@ const ServiceTypes = () => {
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importSourceMonth, setImportSourceMonth] = useState(format(subMonths(new Date(), 1), 'yyyy-MM'));
+  const [importTargetMonth, setImportTargetMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<Omit<ServiceType, 'id'>>({
@@ -206,6 +213,51 @@ const ServiceTypes = () => {
     }
   };
 
+  const handleImport = async () => {
+    if (importing) return;
+    if (importSourceMonth === importTargetMonth) {
+      alert("Selecione meses diferentes para importar.");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const q = query(collection(db, 'serviceTypes'), where('month', '==', importSourceMonth));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        alert("Nenhum serviço encontrado no mês de origem.");
+        setImporting(false);
+        return;
+      }
+
+      const servicesToCopy = snap.docs.map(doc => {
+        const data = doc.data();
+        // Remove ID and adjust month, clear activeDates as they are specific to the source month
+        const { id, createdAt, updatedAt, ...rest } = data as any;
+        return {
+          ...rest,
+          month: importTargetMonth,
+          activeDates: [], // Reset dates as they won't match the new month
+          createdAt: serverTimestamp()
+        };
+      });
+
+      // Batch add would be better, but simple loop for now
+      const promises = servicesToCopy.map(s => addDoc(collection(db, 'serviceTypes'), s));
+      await Promise.all(promises);
+
+      alert(`${servicesToCopy.length} serviços importados com sucesso para ${importTargetMonth}.`);
+      setIsImportModalOpen(false);
+      fetchData();
+    } catch (err) {
+      console.error("Erro ao importar serviços:", err);
+      alert("Erro ao importar serviços. Tente novamente.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filtered = services.filter(s => 
     s.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.cidade.toLowerCase().includes(searchTerm.toLowerCase())
@@ -219,13 +271,22 @@ const ServiceTypes = () => {
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configuração das modalidades operacionais</p>
         </div>
         {isAdmin && (
-          <button
-            onClick={() => openEditor()}
-            className="bg-pmpe-navy text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm"
-          >
-            <Plus className="w-3.5 h-3.5 text-pmpe-gold" />
-            Novo Modalidade
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="bg-pmpe-gold text-pmpe-navy px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-amber-400 transition-all shadow-sm border border-pmpe-gold/20"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Importar de Outro Mês
+            </button>
+            <button
+              onClick={() => openEditor()}
+              className="bg-pmpe-navy text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5 text-pmpe-gold" />
+              Novo Modalidade
+            </button>
+          </div>
         )}
       </div>
 
@@ -611,6 +672,94 @@ const ServiceTypes = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsImportModalOpen(false)}
+              className="absolute inset-0 bg-pmpe-navy/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200"
+            >
+              <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2">
+                  <Download className="w-4 h-4 text-pmpe-gold" />
+                  Importar Serviços
+                </h3>
+                <button 
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                  Copia todos os tipos de serviços de um mês para outro. <br/>
+                  <span className="text-amber-600 font-black">* Os dias de ativação específicos serão limpos para recalibragem.</span>
+                </p>
+
+                <div className="space-y-4 pt-2">
+                   <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Mês de Origem (Copiar de)</label>
+                      <input
+                        type="month"
+                        value={importSourceMonth}
+                        onChange={(e) => setImportSourceMonth(e.target.value)}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 transition-all"
+                      />
+                   </div>
+                   <div className="flex justify-center py-2">
+                      <div className="w-8 h-8 bg-pmpe-navy/5 rounded-full flex items-center justify-center">
+                         <ChevronRight className="w-4 h-4 text-slate-300 transform rotate-90" />
+                      </div>
+                   </div>
+                   <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Mês de Destino (Copiar para)</label>
+                      <input
+                        type="month"
+                        value={importTargetMonth}
+                        onChange={(e) => setImportTargetMonth(e.target.value)}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 transition-all"
+                      />
+                   </div>
+                </div>
+
+                <div className="pt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsImportModalOpen(false)}
+                    className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all font-sans"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="px-6 py-2 bg-pmpe-navy text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-sans"
+                  >
+                    {importing ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    <span>{importing ? 'Importando...' : 'Iniciar Importação'}</span>
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
