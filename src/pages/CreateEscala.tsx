@@ -100,7 +100,7 @@ const CreateEscala = () => {
     const loadStaticData = async () => {
       try {
         const [sSnap, polySnap, settingsSnap, ordSnap] = await Promise.all([
-          getDocs(query(collection(db, 'serviceTypes'))),
+          getDocs(query(collection(db, 'serviceTypes'), where('month', '==', mKey))),
           getDocs(collection(db, 'policemen')),
           getDocs(query(collection(db, 'quotaSettings'), where('month', '==', mKey))),
           getDocs(query(collection(db, 'ordinarySchedules'), where('month', '==', mKey)))
@@ -759,20 +759,16 @@ const CreateEscala = () => {
                                           key={s.id || idx}
                                           initial={{ scale: 0.8, opacity: 0 }} 
                                           animate={{ scale: 1, opacity: 1 }}
-                                          className="flex-1 flex flex-col items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0 py-0.5"
+                                          className="flex-1 flex flex-col items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0 py-0.5 overflow-hidden"
                                           style={{ backgroundColor: s.service?.color || '#334155' }}
                                         >
-                                          <div className="flex items-center gap-1">
-                                            <span>{s.service?.sigla || 'ESC'}</span>
-                                            {s.service?.vagasNecessarias && (
-                                              <span className="text-[7px] bg-black/20 px-1 rounded">
-                                                {s.policemenIds.length}/{s.service.vagasNecessarias}
-                                              </span>
-                                            )}
+                                          <div className="flex flex-col items-center justify-center text-center w-full min-h-0">
+                                             <span className="text-[7px] font-black leading-tight tracking-tighter">{s.service?.sigla || 'ESC'}</span>
+                                             <span className="text-[5px] font-black opacity-90 leading-none truncate w-full px-0.5 mt-0.5 uppercase">{s.service?.nome}</span>
                                           </div>
                                           {s.service?.vagasNecessarias && s.policemenIds.length >= s.service.vagasNecessarias && (
                                             <div className="absolute top-0 right-0 p-0.5">
-                                              <Check className="w-2 h-2 text-emerald-400" />
+                                              <Check className="w-1.5 h-1.5 text-emerald-400" />
                                             </div>
                                           )}
                                         </motion.div>

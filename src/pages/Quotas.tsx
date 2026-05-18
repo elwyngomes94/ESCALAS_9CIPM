@@ -64,7 +64,7 @@ const QuotaControl = () => {
       }
 
       // Fetch Service Types for the table
-      const serviceSnap = await getDocs(collection(db, 'serviceTypes'));
+      const serviceSnap = await getDocs(query(collection(db, 'serviceTypes'), where('month', '==', monthKey)));
       setServiceTypes(serviceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as ServiceType));
 
       // Fetch History logs

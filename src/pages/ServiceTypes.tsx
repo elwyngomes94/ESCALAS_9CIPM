@@ -30,14 +30,16 @@ import {
   Calendar as CalendarIcon,
   Users,
   Download,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, parseISO, getDate, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, parseISO, getDate, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const ServiceTypes = () => {
   const { isAdmin } = useAuth();
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [services, setServices] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,7 +74,12 @@ const ServiceTypes = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, 'serviceTypes'), orderBy('nome'));
+      const monthStr = format(currentMonth, 'yyyy-MM');
+      const q = query(
+        collection(db, 'serviceTypes'), 
+        where('month', '==', monthStr),
+        orderBy('nome')
+      );
       const snap = await getDocs(q);
       const data = snap.docs.map(doc => {
         const d = doc.data();
@@ -96,7 +103,7 @@ const ServiceTypes = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentMonth]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,7 +198,7 @@ const ServiceTypes = () => {
         diasOperacao: [],
         activationType: 'ALL',
         activeDates: [],
-        month: format(new Date(), 'yyyy-MM'),
+        month: format(currentMonth, 'yyyy-MM'),
         observacoes: '',
         color: '#003366',
         categoria: 'PATRULHA',
@@ -270,8 +277,27 @@ const ServiceTypes = () => {
           <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Tipos de Serviço</h2>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configuração das modalidades operacionais</p>
         </div>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
+        
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+          {/* Month Navigator */}
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm order-2 sm:order-1">
+            <button 
+              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              className="p-1.5 hover:bg-slate-50 rounded-lg transition-all"
+            ><ChevronLeft className="w-4 h-4 text-pmpe-navy" /></button>
+            <div className="px-4 flex items-center min-w-[120px] justify-center">
+              <span className="text-[10px] font-black uppercase tracking-widest text-pmpe-navy">
+                {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+              </span>
+            </div>
+            <button 
+              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              className="p-1.5 hover:bg-slate-50 rounded-lg transition-all"
+            ><ChevronRight className="w-4 h-4 text-pmpe-navy" /></button>
+          </div>
+
+          {isAdmin && (
+            <div className="flex items-center gap-2 order-1 sm:order-2">
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="bg-pmpe-gold text-pmpe-navy px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-amber-400 transition-all shadow-sm border border-pmpe-gold/20"
@@ -289,8 +315,9 @@ const ServiceTypes = () => {
           </div>
         )}
       </div>
+    </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />

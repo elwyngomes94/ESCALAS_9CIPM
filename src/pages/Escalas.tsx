@@ -87,13 +87,15 @@ const Escalas = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
 
+  const monthKey = format(currentMonth, 'yyyy-MM');
+
   const fetchData = async () => {
     setLoading(true);
     try {
       const eQ = query(collection(db, 'escalas'), orderBy('date', 'desc'));
       const eSnap = await getDocs(eQ);
       
-      const sSnap = await getDocs(collection(db, 'serviceTypes'));
+      const sSnap = await getDocs(query(collection(db, 'serviceTypes'), where('month', '==', monthKey)));
       const sData = sSnap.docs.map(d => ({ id: d.id, ...d.data() } as ServiceType));
       setServices(sData);
       
@@ -118,7 +120,7 @@ const Escalas = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentMonth]);
 
   const exportToPDF = (esc: any) => {
     const doc = new jsPDF();
@@ -717,7 +719,10 @@ const Escalas = () => {
                 return (
                   <div key={service.id} className="bg-white p-1 shadow-xl border border-slate-300 rounded overflow-x-auto">
                     <div className="min-w-[800px]">
-                        <div className="bg-[#f28c28] text-black font-black text-center py-2 border-2 border-black uppercase text-xs">
+                        <div 
+                          className="text-white font-black text-center py-2 border-2 border-black uppercase text-xs shadow-[inset_0_2px_10px_rgba(255,255,255,0.2)]"
+                          style={{ backgroundColor: service.color || '#f28c28' }}
+                        >
                           ESCALA {service.nome} – 9ª CIPM – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
                         </div>
                         <div className="bg-[#dcdcdc] text-black font-black text-center py-1 border-x-2 border-b-2 border-black uppercase text-[9px]">

@@ -45,7 +45,7 @@ export default function Dashboard() {
           getDocs(collection(db, 'policemen')),
           getDocs(query(collection(db, 'escalas'), orderBy('date', 'desc'), limit(10))),
           getDocs(query(collection(db, 'volunteers'), where('month', '==', monthKey))),
-          getDocs(collection(db, 'serviceTypes')),
+          getDocs(query(collection(db, 'serviceTypes'), where('month', '==', monthKey))),
           getDocs(query(collection(db, 'quotaSettings'), where('month', '==', monthKey))),
           getDocs(query(collection(db, 'quotaLogs'), where('month', '==', monthKey)))
         ]);
@@ -239,8 +239,14 @@ export default function Dashboard() {
                {recentEscalas.map((e) => (
                  <div key={e.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-50 hover:border-slate-200 transition-all group">
                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center group-hover:bg-pmpe-navy/5 transition-colors">
-                        <Briefcase className="w-5 h-5 text-slate-400 group-hover:text-pmpe-navy" />
+                      <div 
+                        className="w-10 h-10 rounded-xl flex items-center justify-center transition-all"
+                        style={{ backgroundColor: e.service?.color ? `${e.service.color}15` : '#f1f5f9' }}
+                      >
+                        <Briefcase 
+                          className="w-5 h-5" 
+                          style={{ color: e.service?.color || '#94a3b8' }}
+                        />
                       </div>
                       <div>
                         <p className="text-[11px] font-black text-slate-800 uppercase leading-none">{e.service?.nome}</p>
