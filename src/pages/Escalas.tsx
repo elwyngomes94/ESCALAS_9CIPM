@@ -854,18 +854,6 @@ const Escalas = () => {
                               </tfoot>
                             </table>
 
-                            {/* Signature Footer */}
-                            <div className="mt-16 grid grid-cols-2 gap-20 px-16 text-center">
-                               <div className="pt-10 border-t-2 border-black">
-                                  <p className="text-[13px] font-black uppercase mb-1">Chefe da Seção de Planejamento (P/3)</p>
-                                  <p className="text-[11px] font-bold text-slate-500 tracking-wider">9ª CIPM - ARARIPINA-PE</p>
-                               </div>
-                               <div className="pt-10 border-t-2 border-black">
-                                  <p className="text-[13px] font-black uppercase mb-1">Comandante da 9ª CIPM</p>
-                                  <p className="text-[11px] font-bold text-slate-500 tracking-wider">9ª CIPM - ARARIPINA-PE</p>
-                               </div>
-                            </div>
-
                             <div className="mt-12 text-center text-[10px] font-bold text-slate-400 italic">
                                Relatório gerado em {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} através do Sistema Integrado de Escalas (CIPM/9)
                             </div>
@@ -1371,17 +1359,6 @@ const Escalas = () => {
                 <p className="text-[14px] leading-relaxed text-slate-800 font-medium whitespace-pre-wrap">{scaleToPrint.observations}</p>
               </div>
             )}
-
-            <div className="mt-24 grid grid-cols-2 gap-24 px-12 text-center">
-               <div className="pt-12 border-t-2 border-black">
-                  <p className="text-[14px] font-black uppercase text-black">Chefe da Seção de Planejamento (P/3)</p>
-                  <p className="text-[12px] font-black text-slate-400">9ª CIPM - ARARIPINA-PE</p>
-               </div>
-               <div className="pt-12 border-t-2 border-black">
-                  <p className="text-[14px] font-black uppercase text-black">Comandante da 9ª CIPM</p>
-                  <p className="text-[12px] font-black text-slate-400">9ª CIPM - ARARIPINA-PE</p>
-               </div>
-            </div>
 
             <div className="mt-16 text-center text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">
                Policia Militar de Pernambuco - Valorizamos a Nossa Gente
