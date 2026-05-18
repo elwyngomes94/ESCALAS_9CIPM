@@ -792,6 +792,17 @@ const Escalas = () => {
                       });
 
                       const totalCotasValue = rows.length;
+                      
+                      // Pre-calculate background colors for alternating by day
+                      let currentBatchColor = '#ffffff';
+                      let lastDayNum = -1;
+                      const rowColors = rows.map(r => {
+                        if (r.day !== lastDayNum) {
+                          currentBatchColor = currentBatchColor === '#ffffff' ? '#fff7ed' : '#ffffff';
+                          lastDayNum = r.day;
+                        }
+                        return currentBatchColor;
+                      });
 
                       return (
                         <div key={service.id} data-type={service.tipo} className="official-report-table bg-white p-1 shadow-2xl border-2 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
@@ -826,7 +837,7 @@ const Escalas = () => {
                                       key={idx} 
                                       className="border-x-2 border-b-2 border-black text-center font-black"
                                       style={{ 
-                                        backgroundColor: row.day % 2 !== 0 ? '#f28c28' : '#ffffff',
+                                        backgroundColor: rowColors[idx],
                                         color: '#000000'
                                       }}
                                     >

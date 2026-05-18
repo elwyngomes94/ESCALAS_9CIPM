@@ -406,12 +406,12 @@ const CreateEscala = () => {
   });
 
   const filteredVolunteers = useMemo(() => {
-    const search = searchTerm.toLowerCase();
+    const search = searchTerm.toLowerCase().trim();
     return joinedVolunteers
-      .filter(v => v.type === activeTab)
+      .filter(v => v.type?.toUpperCase() === activeTab)
       .filter(v => {
         const poly = v.policeman;
-        return !searchTerm || 
+        return !search || 
           poly?.nomeGuerra.toLowerCase().includes(search) || 
           poly?.matricula.includes(search);
       });
