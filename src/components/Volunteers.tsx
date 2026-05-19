@@ -189,7 +189,6 @@ const Volunteers = ({ type }: VolunteersProps) => {
                 cotas: data.cotas,
                 desiredService: data.desiredService || '',
                 month: monthKey,
-                order: volunteers.length + importedCount,
                 createdAt: serverTimestamp()
             });
 
@@ -255,7 +254,6 @@ const Volunteers = ({ type }: VolunteersProps) => {
                 cotas: 10, // Padrão 10 cotas
                 desiredService: '',
                 month: monthKey,
-                order: volunteers.length + importedCount,
                 createdAt: serverTimestamp()
             });
             importedCount++;
@@ -318,7 +316,6 @@ const Volunteers = ({ type }: VolunteersProps) => {
         const newVolRef = doc(collection(db, 'volunteers'));
         batch.set(newVolRef, {
           ...formData,
-          order: volunteers.length,
           createdAt: serverTimestamp()
         });
       }

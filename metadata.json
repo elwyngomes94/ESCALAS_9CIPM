@@ -2,5 +2,5 @@
   "name": "Escalas Extras 9ª CIPM - PMPE",
   "description": "Sistema automatizado de gestão de escalas extras (PJES/OPS) com calendário interativo, controle de cotas inteligente e voluntariado instantâneo para a 9ª CIPM.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
