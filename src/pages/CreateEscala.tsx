@@ -85,12 +85,13 @@ const CreateEscala = () => {
   const [submitting, setSubmitting] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [undoStack, setUndoStack] = useState<{ 
-    action: 'ASSIGN' | 'REMOVE', 
+    action: 'ASSIGN' | 'REMOVE' | 'BATCH_AI', 
     data: {
-      serviceId: string,
-      policemanId: string,
-      date: Date,
-      escalaId?: string
+      serviceId?: string,
+      policemanId?: string,
+      date?: Date,
+      escalaId?: string,
+      batch?: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date, escalaId?: string }[]
     } 
   }[]>([]);
   const [duplicating, setDuplicating] = useState(false);
@@ -332,15 +333,15 @@ const CreateEscala = () => {
   }, [currentMonth, mKey]); 
 
 
-  const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }, isUndo = false) => {
-    if (submitting) return; // Prevent double clicks
+  const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }, isUndo = false, isSilent = false) => {
+    if (submitting) return false; 
     
     const assignInfo = customAssignInfo || assignmentModal;
-    if (!assignInfo || !isAdmin) return;
+    if (!assignInfo || !isAdmin) return false;
     
     const { policemanId, date } = assignInfo;
     const service = services.find(s => s.id === serviceId);
-    if (!service) return;
+    if (!service) return false;
 
     const dateStr = format(date, 'yyyy-MM-dd');
     const needed = service.cotasPorServico || 1;
@@ -363,8 +364,8 @@ const CreateEscala = () => {
       const dayNum = getDate(date);
       const isOrdinary = (ordinarySchedules[policemanId] || []).includes(dayNum);
       if (isOrdinary) {
-        alert(`Erro: O policial já está escalado no Serviço Ordinário nesta data. Não é permitido escala extra em dias de serviço ordinário.`);
-        return;
+        if (!isSilent) alert(`Erro: O policial já está escalado no Serviço Ordinário nesta data. Não é permitido escala extra em dias de serviço ordinário.`);
+        return false;
       }
 
       const overlappingScale = joinedEscalas.find(e => {
@@ -383,8 +384,8 @@ const CreateEscala = () => {
       });
 
       if (overlappingScale) {
-         alert(`Conflito de Horário! O policial já está escalado no serviço ${overlappingScale.service?.sigla} (${overlappingScale.service?.horarioInicio}-${overlappingScale.service?.horarioTermino}) que choca com este horário.`);
-         return;
+         if (!isSilent) alert(`Conflito de Horário! O policial já está escalado no serviço ${overlappingScale.service?.sigla} (${overlappingScale.service?.horarioInicio}-${overlappingScale.service?.horarioTermino}) que choca com este horário.`);
+         return false;
       }
 
       // 2. Strict Duplication Check
@@ -396,8 +397,8 @@ const CreateEscala = () => {
       );
 
       if (alreadyScaledInSameType && typeBeingAssigned === 'PJES') {
-         alert(`Este policial já possui uma escala de PJES para este dia (${alreadyScaledInSameType.service?.sigla}).`);
-         return;
+         if (!isSilent) alert(`Este policial já possui uma escala de PJES para este dia (${alreadyScaledInSameType.service?.sigla}).`);
+         return false;
       }
 
       // 3. Quota Check for the Policeman
@@ -413,22 +414,22 @@ const CreateEscala = () => {
         const neededValue = Number(needed);
 
         if (currentMonthCotasUsed + neededValue > maxAllowedQuotas) {
-          alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar um serviço que consome ${neededValue}.`);
-          return;
+          if (!isSilent) alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar um serviço que consome ${neededValue}.`);
+          return false;
         }
       }
 
-      const existingEscala = joinedEscalas.find(e => 
+      const existingEscalaCheck = joinedEscalas.find(e => 
         e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
       );
 
       // 4. Vacancy Check
-      const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
+      const currentSlotsUsed = existingEscalaCheck?.policemenIds.length || 0;
       const maxSlots = service.vagasNecessarias || 0; 
 
       if (maxSlots > 0 && currentSlotsUsed >= maxSlots) {
-        alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
-        return;
+        if (!isSilent) alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
+        return false;
       }
 
       const type = service.tipo as 'PJES' | 'OPS';
@@ -447,8 +448,8 @@ const CreateEscala = () => {
       }
 
       if (limit > 0 && used + needed > limit) {
-        alert(`Erro: Cota da UNIDADE insuficiente para ${service.sigla}.`);
-        return;
+        if (!isSilent) alert(`Erro: Cota da UNIDADE insuficiente para ${service.sigla}.`);
+        return false;
       }
     }
 
@@ -492,7 +493,7 @@ const CreateEscala = () => {
         month: format(date, 'yyyy-MM')
       });
 
-      if (!isUndo) {
+      if (!isUndo && !isSilent) {
         setUndoStack(prev => [{ 
           action: 'ASSIGN', 
           data: { serviceId, policemanId, date, escalaId: finalEscalaIdValue } 
@@ -504,8 +505,10 @@ const CreateEscala = () => {
       }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
+      return true;
     } catch (err) {
       console.error("Erro ao salvar escala:", err);
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -567,22 +570,39 @@ const CreateEscala = () => {
     
     setUndoStack(rest);
 
-    if (lastOp.action === 'ASSIGN') {
-      // Finding the current escalaId because it might have changed if others were added/removed
-      // Actually we just call handleRemoveFromScale based on the IDs
+    if (lastOp.action === 'ASSIGN' && lastOp.data.serviceId && lastOp.data.policemanId && lastOp.data.date) {
       const escala = joinedEscalas.find(e => 
         e.serviceTypeId === lastOp.data.serviceId && 
         isSameDay(e.date.toDate(), lastOp.data.date) &&
-        e.policemenIds.includes(lastOp.data.policemanId)
+        e.policemenIds.includes(lastOp.data.policemanId!)
       );
       if (escala) {
-        await handleRemoveFromScale(escala.id!, lastOp.data.policemanId, true);
+        await handleRemoveFromScale(escala.id!, lastOp.data.policemanId!, true);
       }
-    } else if (lastOp.action === 'REMOVE') {
+    } else if (lastOp.action === 'REMOVE' && lastOp.data.serviceId && lastOp.data.policemanId && lastOp.data.date) {
       await handleAssignService(lastOp.data.serviceId, { 
         policemanId: lastOp.data.policemanId, 
         date: lastOp.data.date 
       }, true);
+    } else if (lastOp.action === 'BATCH_AI' && lastOp.data.batch) {
+      // Create a batch of deletions for all assignments in the AI batch
+      setLoading(true);
+      try {
+        for (const item of lastOp.data.batch) {
+          const escala = joinedEscalas.find(e => 
+            e.serviceTypeId === item.serviceId && 
+            isSameDay(e.date.toDate(), item.date) &&
+            e.policemenIds.includes(item.policemanId)
+          );
+          if (escala) {
+            await handleRemoveFromScale(escala.id!, item.policemanId, true);
+          }
+        }
+      } catch (err) {
+        console.error("Erro no desfazer em lote:", err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -685,19 +705,28 @@ const CreateEscala = () => {
 
       if (data.assignments && data.assignments.length > 0) {
         let count = 0;
-        // Process assignments sequentially or in small batches to respect handleAssignService logic
+        const batchLog: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date }[] = [];
+        
         for (const assignment of data.assignments) {
-          try {
-            // Re-validate and assign using the existing robust logic
-            await handleAssignService(assignment.serviceId, {
-              policemanId: assignment.policemanId,
-              date: new Date(assignment.date + 'T12:00:00') // Avoid timezone shifts
-            });
+          const d = new Date(assignment.date + 'T12:00:00');
+          const success = await handleAssignService(assignment.serviceId, {
+            policemanId: assignment.policemanId,
+            date: d
+          }, false, true); // Silent and no individual undo entry
+          
+          if (success) {
             count++;
-          } catch (e) {
-            console.error("AI Assignment item failed logic check:", e);
+            batchLog.push({ action: 'ASSIGN', serviceId: assignment.serviceId, policemanId: assignment.policemanId, date: d });
           }
         }
+
+        if (batchLog.length > 0) {
+          setUndoStack(prev => [{ 
+            action: 'BATCH_AI', 
+            data: { batch: batchLog } 
+          }, ...prev.slice(0, 19)]);
+        }
+
         alert(`${count} escalas sugeridas pela IA foram processadas com sucesso.`);
       } else {
         alert("A IA não encontrou novas sugestões de escala que respeitem as regras atuais.");
