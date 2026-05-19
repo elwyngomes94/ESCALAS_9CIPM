@@ -60,6 +60,7 @@ const Peculio = () => {
   const [aiPreviewData, setAiPreviewData] = useState<Omit<Policeman, 'id' | 'createdAt'>[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'motorista' | 'ativo' | 'inativo' | 'ferias' | 'licenca'>('all');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
   const [formData, setFormData] = useState<Omit<Policeman, 'id'>>({
     nomeCompleto: '',
@@ -199,6 +200,48 @@ const Peculio = () => {
     }
   };
 
+  const handleBulkUpdate = async (field: 'isMotorista' | 'situacao', value: any) => {
+    if (selectedIds.length === 0) return;
+    setLoading(true);
+    try {
+      const { writeBatch } = await import('firebase/firestore');
+      const batch = writeBatch(db);
+      
+      selectedIds.forEach(id => {
+        const docRef = doc(db, 'policemen', id);
+        batch.update(docRef, {
+          [field]: value,
+          updatedAt: serverTimestamp()
+        });
+      });
+      
+      await batch.commit();
+      
+      setPolicemen(prev => prev.map(p => 
+        selectedIds.includes(p.id!) ? { ...p, [field]: value } : p
+      ));
+      setSelectedIds([]);
+    } catch (err) {
+      console.error("Erro ao atualizar em massa:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map(p => p.id!));
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!window.confirm('Deseja realmente excluir este policial?')) return;
     try {
@@ -329,7 +372,10 @@ const Peculio = () => {
               placeholder="Buscar por nome, guerra ou matrícula..."
               className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setSelectedIds([]);
+              }}
             />
           </div>
         </div>
@@ -338,6 +384,16 @@ const Peculio = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
+                {isAdmin && (
+                  <th className="px-6 py-3 w-10">
+                    <input 
+                      type="checkbox"
+                      className="w-4 h-4 text-pmpe-navy border-slate-300 rounded focus:ring-pmpe-navy cursor-pointer"
+                      checked={selectedIds.length > 0 && selectedIds.length === filtered.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Policial</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Matrícula</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Graduação</th>
@@ -352,8 +408,25 @@ const Peculio = () => {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={isAdmin ? 6 : 5} className="px-6 py-8 text-center text-xs text-slate-400 font-bold uppercase italic">Nenhum registro encontrado</td></tr>
               ) : filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/80 transition-colors group">
-                  <td className="px-6 py-3">
+                <tr 
+                  key={p.id} 
+                  className={cn(
+                    "hover:bg-slate-50/80 transition-colors group",
+                    selectedIds.includes(p.id!) && "bg-blue-50/40"
+                  )}
+                >
+                  {isAdmin && (
+                    <td className="px-6 py-3">
+                      <input 
+                        type="checkbox"
+                        className="w-4 h-4 text-pmpe-navy border-slate-300 rounded focus:ring-pmpe-navy cursor-pointer"
+                        checked={selectedIds.includes(p.id!)}
+                        onChange={() => toggleSelection(p.id!)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </td>
+                  )}
+                  <td className="px-6 py-3" onClick={() => isAdmin && toggleSelection(p.id!)}>
                     <div className="flex items-center gap-3">
                        <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 group-hover:bg-pmpe-navy group-hover:text-white transition-colors">
                          {p.nomeGuerra.substring(0, 2).toUpperCase()}
@@ -460,6 +533,72 @@ const Peculio = () => {
           </table>
         </div>
       </div>
+
+      {/* Floating Bulk Actions Bar */}
+      <AnimatePresence>
+        {selectedIds.length > 0 && isAdmin && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-pmpe-navy text-white px-6 py-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-6 backdrop-blur-md"
+          >
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-pmpe-gold uppercase tracking-widest">Ação em Massa</span>
+              <span className="text-sm font-bold">{selectedIds.length} selecionados</span>
+            </div>
+
+            <div className="h-8 w-px bg-white/10 mx-2" />
+
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => handleBulkUpdate('situacao', 'Ativo')}
+                className="p-2 hover:bg-white/10 rounded-xl transition-all flex flex-col items-center gap-1 group"
+                title="Marcar como Ativo"
+              >
+                <UserCheck className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <span className="text-[8px] font-black uppercase">Ativo</span>
+              </button>
+              
+              <button 
+                onClick={() => handleBulkUpdate('isMotorista', true)}
+                className="p-2 hover:bg-white/10 rounded-xl transition-all flex flex-col items-center gap-1 group"
+                title="Marcar como Motorista"
+              >
+                <Car className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
+                <span className="text-[8px] font-black uppercase">Motorista</span>
+              </button>
+
+              <button 
+                onClick={() => handleBulkUpdate('situacao', 'Férias')}
+                className="p-2 hover:bg-white/10 rounded-xl transition-all flex flex-col items-center gap-1 group"
+                title="Colocar em Férias"
+              >
+                <Sparkles className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span className="text-[8px] font-black uppercase">Férias</span>
+              </button>
+
+              <button 
+                onClick={() => handleBulkUpdate('situacao', 'Licença')}
+                className="p-2 hover:bg-white/10 rounded-xl transition-all flex flex-col items-center gap-1 group"
+                title="Colocar em Licença"
+              >
+                <Shield className="w-5 h-5 text-rose-400 group-hover:scale-110 transition-transform" />
+                <span className="text-[8px] font-black uppercase">Licença</span>
+              </button>
+            </div>
+
+            <div className="h-8 w-px bg-white/10 mx-2" />
+
+            <button 
+              onClick={() => setSelectedIds([])}
+              className="p-2 hover:bg-white/10 rounded-xl transition-all text-white/60 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isAiModalOpen && (
