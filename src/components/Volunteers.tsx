@@ -33,7 +33,8 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Check,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, addMonths, subMonths, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, getDate, getDay } from 'date-fns';
@@ -50,6 +51,9 @@ const Volunteers = ({ type }: VolunteersProps) => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importSourceMonth, setImportSourceMonth] = useState(format(subMonths(new Date(), 1), 'yyyy-MM'));
+  const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [polySearch, setPolySearch] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -143,50 +147,80 @@ const Volunteers = ({ type }: VolunteersProps) => {
     }
   }, [formData.policemanId, monthKey, isModalOpen]);
 
-  const handleImportPrevious = async () => {
-    if (!window.confirm('Deseja importar a lista de voluntários do mês anterior para o mês atual?')) return;
-    setLoading(true);
+  const handleImport = async () => {
+    if (importing) return;
+    if (importSourceMonth === monthKey) {
+      alert("Selecione um mês de origem diferente do mês atual.");
+      return;
+    }
+
+    setImporting(true);
     try {
-      const prevMonthKey = format(subMonths(currentDate, 1), 'yyyy-MM');
       const prevVolQ = query(
         collection(db, 'volunteers'),
         where('type', '==', type),
-        where('month', '==', prevMonthKey)
+        where('month', '==', importSourceMonth)
       );
       const prevVolSnap = await getDocs(prevVolQ);
+      
+      if (prevVolSnap.empty) {
+        alert("Nenhum voluntário encontrado no mês de origem.");
+        setImporting(false);
+        return;
+      }
       
       const { writeBatch } = await import('firebase/firestore');
       const batch = writeBatch(db);
       
       let importedCount = 0;
-      prevVolSnap.docs.forEach(d => {
+      
+      // Also fetch ordinary schedules for source month to optionally copy them
+      // Actually, standardizing on just the volunteer record for now as requested.
+      
+      for (const d of prevVolSnap.docs) {
         const data = d.data() as Volunteer;
-        // Check if already exists in current month
         const alreadyExists = volunteers.some(v => v.policemanId === data.policemanId);
+        
         if (!alreadyExists) {
             const newDocRef = doc(collection(db, 'volunteers'));
             batch.set(newDocRef, {
                 policemanId: data.policemanId,
                 type: data.type,
                 cotas: data.cotas,
+                desiredService: data.desiredService || '',
                 month: monthKey,
                 createdAt: serverTimestamp()
             });
+
+            // Try to copy ordinary schedule too if it exists for the source month
+            const oldScheduleRef = doc(db, 'ordinarySchedules', `${data.policemanId}_${importSourceMonth}`);
+            const oldScheduleSnap = await getDoc(oldScheduleRef);
+            if (oldScheduleSnap.exists()) {
+                const newScheduleRef = doc(db, 'ordinarySchedules', `${data.policemanId}_${monthKey}`);
+                batch.set(newScheduleRef, {
+                    policemanId: data.policemanId,
+                    month: monthKey,
+                    days: oldScheduleSnap.data().days || [],
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
+            }
+
             importedCount++;
         }
-      });
+      }
       
       if (importedCount > 0) {
         await batch.commit();
         alert(`${importedCount} voluntários importados com sucesso!`);
+        setIsImportModalOpen(false);
         fetchData();
       } else {
-        alert('Nenhum voluntário novo para importar do mês anterior.');
+        alert('Todos os voluntários do mês de origem já estão cadastrados no mês atual.');
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'volunteers_import');
     } finally {
-      setLoading(false);
+      setImporting(false);
     }
   };
 
@@ -320,15 +354,13 @@ const Volunteers = ({ type }: VolunteersProps) => {
 
           {isAdmin && (
             <div className="flex gap-2">
-              {volunteers.length === 0 && (
-                <button
-                  onClick={handleImportPrevious}
-                  className="bg-white text-pmpe-navy border border-pmpe-navy/20 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm shrink-0"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Importar Anterior
-                </button>
-              )}
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="bg-white text-pmpe-navy border border-pmpe-navy/20 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Importar
+              </button>
               <button
                 onClick={() => setIsModalOpen(true)}
                 className="bg-pmpe-navy text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm shrink-0"
@@ -719,6 +751,88 @@ const Volunteers = ({ type }: VolunteersProps) => {
                   </button>
                 </div>
               </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsImportModalOpen(false)}
+              className="absolute inset-0 bg-pmpe-navy/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200"
+            >
+              <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter flex items-center gap-2">
+                  <Download className="w-4 h-4 text-pmpe-gold" />
+                  Importar Voluntários {type}
+                </h3>
+                <button 
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                  Copia a lista de voluntários de um mês anterior para o mês atual ({monthName}). <br/>
+                  <span className="text-amber-600 font-black">* Também serão copiadas as escalas ordinárias (dias indisponíveis) dos policiais.</span>
+                </p>
+
+                <div className="space-y-4 pt-2">
+                   <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Mês de Origem (Copiar de)</label>
+                      <input
+                        type="month"
+                        value={importSourceMonth}
+                        onChange={(e) => setImportSourceMonth(e.target.value)}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 transition-all font-bold"
+                      />
+                   </div>
+                   <div className="flex justify-center py-2">
+                      <div className="w-8 h-8 bg-pmpe-navy/5 rounded-full flex items-center justify-center">
+                         <ChevronRight className="w-4 h-4 text-slate-300 transform rotate-90" />
+                      </div>
+                   </div>
+                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mês de Destino</p>
+                      <p className="text-sm font-black text-pmpe-navy uppercase">{monthName}</p>
+                   </div>
+                </div>
+
+                <div className="pt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsImportModalOpen(false)}
+                    className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all font-sans"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="px-6 py-2 bg-pmpe-navy text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-sans"
+                  >
+                    {importing ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5 text-pmpe-gold" />
+                    )}
+                    <span>{importing ? 'Importando...' : 'Iniciar Importação'}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
