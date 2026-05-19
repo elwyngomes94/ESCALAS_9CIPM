@@ -707,16 +707,60 @@ const CreateEscala = () => {
         let count = 0;
         const batchLog: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date }[] = [];
         
+        // We'll use a local shadow to track assignments within this loop to avoid stale state issues
+        const localAssignments = [...joinedEscalas];
+        const localUsage = { ...currentUsage };
+
         for (const assignment of data.assignments) {
-          const d = new Date(assignment.date + 'T12:00:00');
-          const success = await handleAssignService(assignment.serviceId, {
-            policemanId: assignment.policemanId,
-            date: d
-          }, false, true); // Silent and no individual undo entry
-          
-          if (success) {
-            count++;
-            batchLog.push({ action: 'ASSIGN', serviceId: assignment.serviceId, policemanId: assignment.policemanId, date: d });
+          try {
+            const d = new Date(assignment.date + 'T12:00:00');
+            const dateStr = format(d, 'yyyy-MM-dd');
+            const service = services.find(s => s.id === assignment.serviceId);
+            if (!service) continue;
+
+            const needed = service.cotasPorServico || 1;
+            
+            // Local Validation (to solve stale state)
+            const dayNum = getDate(d);
+            if ((ordinarySchedules[assignment.policemanId] || []).includes(dayNum)) continue;
+
+            const hasConflict = localAssignments.some(e => {
+              const eDateStr = format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd');
+              if (eDateStr !== dateStr) return false;
+              if (!e.policemenIds.includes(assignment.policemanId)) return false;
+              // Simple conflict check (could be more complex with hours, but for AI we trust model or do basic type check)
+              if (service.tipo === 'PJES' && e.service?.tipo === 'PJES') return true;
+              return false;
+            });
+            if (hasConflict) continue;
+
+            // Vacancy check
+            const existingInD = localAssignments.find(e => e.serviceTypeId === assignment.serviceId && format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd') === dateStr);
+            if (existingInD && existingInD.policemenIds.length >= (service.vagasNecessarias || 0)) continue;
+
+            const success = await handleAssignService(assignment.serviceId, {
+              policemanId: assignment.policemanId,
+              date: d
+            }, false, true); 
+            
+            if (success) {
+              count++;
+              batchLog.push({ action: 'ASSIGN', serviceId: assignment.serviceId, policemanId: assignment.policemanId, date: d });
+              
+              // Update local shadow
+              if (existingInD) {
+                existingInD.policemenIds.push(assignment.policemanId);
+              } else {
+                localAssignments.push({
+                  serviceTypeId: assignment.serviceId,
+                  policemenIds: [assignment.policemanId],
+                  date: d,
+                  service: service
+                } as any);
+              }
+            }
+          } catch (itemErr) {
+            console.error("Erro no item da IA:", itemErr);
           }
         }
 
