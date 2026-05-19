@@ -84,6 +84,7 @@ const CreateEscala = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiProgress, setAiProgress] = useState<{ current: number, total: number } | null>(null);
   const [undoStack, setUndoStack] = useState<{ 
     action: 'ASSIGN' | 'REMOVE' | 'BATCH_AI', 
     data: {
@@ -659,18 +660,20 @@ const CreateEscala = () => {
     }
   };
 
-  const [aiProgress, setAiProgress] = useState<{ current: number, total: number } | null>(null);
+  const handleIntelligentDistribution = async () => {
+    if (!isAdmin || submitting || loading || aiLoading) return;
+    
+    const confirmMsg = "Deseja realizar a Distribuição Inteligente? O sistema preencherá as vagas ociosas priorizando o equilíbrio de escalas entre os voluntários e respeitando todas as regras de serviço.";
+    if (!window.confirm(confirmMsg)) return;
 
-  const handleFairDistribution = async () => {
-    if (!isAdmin || submitting || loading) return;
-    if (!window.confirm("Deseja realizar a Distribuição Justa local? O sistema preencherá as vagas priorizando quem tem MENOS escalas no mês, garantindo equilíbrio entre os voluntários.")) return;
-
-    setLoading(true);
+    setAiLoading(true);
+    setAiProgress(null);
+    
     try {
       const activeTabEnum = activeTab as 'PJES' | 'OPS';
       const targetServices = services.filter(s => s.month === mKey && s.tipo?.toUpperCase() === activeTab);
-      const batchLog: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date }[] = [];
       
+      const batchLog: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date }[] = [];
       const localAssignments = [...joinedEscalas];
       
       const getCounts = () => {
@@ -683,6 +686,24 @@ const CreateEscala = () => {
         return counts;
       };
 
+      // Calculate total work to do for progress
+      let totalVacancies = 0;
+      for (const service of targetServices) {
+        for (const day of days) {
+          const currentE = localAssignments.find(e => 
+            e.serviceTypeId === service.id && 
+            isSameDay(e.date.toDate ? e.date.toDate() : e.date, day)
+          );
+          const needs = service.vagasNecessarias || 0;
+          const filled = currentE?.policemenIds.length || 0;
+          if (needs > filled) totalVacancies += (needs - filled);
+        }
+      }
+
+      setAiProgress({ current: 0, total: totalVacancies });
+      let currentHandled = 0;
+
+      // Iterate through days first to spread duty evenly across the month
       for (const day of days) {
         const dayStr = format(day, 'yyyy-MM-dd');
         for (const service of targetServices) {
@@ -701,38 +722,54 @@ const CreateEscala = () => {
               .filter(v => v.type?.toUpperCase() === activeTab)
               .filter(v => {
                 const pid = v.policemanId!;
+                // Rule 1: No Ordinary Service
                 if ((ordinarySchedules[pid] || []).includes( getDate(day) )) return false;
+                
+                // Rule 2: Not already in this specific scale
                 if (currentE?.policemenIds.includes(pid)) return false;
 
+                // Rule 3: Time Conflict within the same day
                 const hasConflict = localAssignments.some(e => {
                   const eDateStr = format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd');
                   if (eDateStr !== dayStr) return false;
                   if (!e.policemenIds.includes(pid)) return false;
+                  
+                  // Rules: PJES overlap
                   if (service.tipo === 'PJES' && e.service?.tipo === 'PJES') return true;
+                  
+                  // More complex overlap checks could go here if needed, but for now we follow the 1 PJES/day rule
                   return false;
                 });
                 
                 if (hasConflict) return false;
 
+                // Rule 4: Quota Check
                 const currentUsed = currentCounts[pid] || 0;
                 if (service.tipo === 'PJES' && currentUsed >= (v.cotas || 0)) return false;
 
                 return true;
               })
               .sort((a, b) => {
+                // Fair Distribution Logic: 
+                // 1. Give to those with FEWER scales so far
+                // 2. If equal, use seniority (Military logic: smaller antiquity = more senior)
                 const countA = currentCounts[a.policemanId!] || 0;
                 const countB = currentCounts[b.policemanId!] || 0;
                 if (countA !== countB) return countA - countB;
                 return (a.policeman?.antiguidade || 999) - (b.policeman?.antiguidade || 999);
               });
 
-            if (candidates.length === 0) break;
+            if (candidates.length === 0) {
+              currentHandled += (totalNeeded - filled);
+              setAiProgress(prev => prev ? { ...prev, current: currentHandled } : null);
+              break;
+            }
 
             const chosen = candidates[0];
             const success = await handleAssignService(service.id, {
               policemanId: chosen.policemanId!,
               date: day
-            }, false, true);
+            }, false, true); // Silent mode
 
             if (success) {
               batchLog.push({ action: 'ASSIGN', serviceId: service.id, policemanId: chosen.policemanId!, date: day });
@@ -748,7 +785,11 @@ const CreateEscala = () => {
                 } as any);
               }
               filled++;
+              currentHandled++;
+              setAiProgress({ current: currentHandled, total: totalVacancies });
             } else {
+              currentHandled++;
+              setAiProgress(prev => prev ? { ...prev, current: currentHandled } : null);
               break;
             }
           }
@@ -760,22 +801,22 @@ const CreateEscala = () => {
           action: 'BATCH_AI', 
           data: { batch: batchLog } 
         }, ...prev.slice(0, 19)]);
-        alert(`${batchLog.length} escalas distribuídas com sucesso localmente.`);
+        alert(`${batchLog.length} escalas distribuídas com inteligência e equilíbrio.`);
       } else {
-        alert("Não foram encontradas vagas passíveis de distribuição.");
+        alert("Não foram encontradas vagas passíveis de preenchimento que respeitem as regras.");
       }
     } catch (err) {
       console.error(err);
-      alert("Erro na distribuição: " + (err instanceof Error ? err.message : String(err)));
+      alert("Erro na distribuição inteligente: " + (err instanceof Error ? err.message : String(err)));
     } finally {
-      setLoading(false);
+      setAiLoading(false);
+      setAiProgress(null);
     }
   };
 
   const handleRemoteAISchedule = async () => {
     if (!isAdmin || aiLoading) return;
-    
-    if (!window.confirm("Deseja utilizar a Inteligência Artificial para analisar as vagas e sugerir escalas? O modelo buscará otimizar o preenchimento mantendo o equilíbrio.")) return;
+    if (!window.confirm("Deseja utilizar a Inteligência Artificial para analisar e sugerir uma distribuição otimizada via nuvem?")) return;
 
     setAiLoading(true);
     setAiProgress(null);
@@ -820,15 +861,11 @@ const CreateEscala = () => {
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Falha na resposta da IA');
-      }
+      if (!response.ok) throw new Error('Falha na resposta da IA');
       
       const data = await response.json();
 
       if (data.assignments && data.assignments.length > 0) {
-        let count = 0;
         const total = data.assignments.length;
         setAiProgress({ current: 0, total });
 
@@ -845,40 +882,13 @@ const CreateEscala = () => {
             const service = services.find(s => s.id === assignment.serviceId);
             if (!service) continue;
 
-            const dayNum = getDate(d);
-            if ((ordinarySchedules[assignment.policemanId] || []).includes(dayNum)) continue;
-
-            const hasConflict = localAssignments.some(e => {
-              const eDateStr = format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd');
-              if (eDateStr !== dateStr) return false;
-              if (!e.policemenIds.includes(assignment.policemanId)) return false;
-              if (service.tipo === 'PJES' && e.service?.tipo === 'PJES') return true;
-              return false;
-            });
-            if (hasConflict) continue;
-
-            const existingInD = localAssignments.find(e => e.serviceTypeId === assignment.serviceId && format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd') === dateStr);
-            if (existingInD && existingInD.policemenIds.length >= (service.vagasNecessarias || 0)) continue;
-
             const success = await handleAssignService(assignment.serviceId, {
               policemanId: assignment.policemanId,
               date: d
             }, false, true); 
             
             if (success) {
-              count++;
               batchLog.push({ action: 'ASSIGN', serviceId: assignment.serviceId, policemanId: assignment.policemanId, date: d });
-              
-              if (existingInD) {
-                existingInD.policemenIds.push(assignment.policemanId);
-              } else {
-                localAssignments.push({
-                  serviceTypeId: assignment.serviceId,
-                  policemenIds: [assignment.policemanId],
-                  date: d,
-                  service: service
-                } as any);
-              }
             }
           } catch (itemErr) {
             console.error("Erro no item da IA:", itemErr);
@@ -892,9 +902,9 @@ const CreateEscala = () => {
           }, ...prev.slice(0, 19)]);
         }
 
-        alert(`${count} escalas sugeridas pela IA foram processadas com sucesso.`);
+        alert(`${batchLog.length} escalas sugeridas pela IA foram processadas.`);
       } else {
-        alert("A IA não encontrou novas sugestões de escala que respeitem as regras atuais.");
+        alert("A IA não encontrou novas sugestões viáveis.");
       }
     } catch (err) {
       console.error(err);
@@ -1094,37 +1104,37 @@ const CreateEscala = () => {
               </button>
 
               <button 
-                onClick={handleFairDistribution}
-                disabled={loading || submitting}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
-                  loading || submitting
-                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
-                    : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
-                )}
-              >
-                 <BarChart3 className="w-3.5 h-3.5" />
-                 Distribuição Justa
-              </button>
-
-              <button 
-                onClick={() => handleRemoteAISchedule()}
-                disabled={aiLoading}
+                onClick={handleIntelligentDistribution}
+                disabled={aiLoading || loading || submitting}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border relative overflow-hidden",
-                  aiLoading 
+                  aiLoading || loading || submitting 
                     ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
-                    : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
+                    : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 shadow-sm"
                 )}
               >
                  {aiLoading && aiProgress && (
                    <div 
-                     className="absolute bottom-0 left-0 h-1 bg-emerald-400 transition-all duration-300" 
+                     className="absolute bottom-0 left-0 h-1 bg-blue-400 transition-all duration-300" 
                      style={{ width: `${(aiProgress.current / aiProgress.total) * 100}%` }}
                    />
                  )}
                  <Sparkles className={cn("w-3.5 h-3.5", aiLoading && "animate-pulse")} />
-                 {aiLoading ? (aiProgress ? `Processando ${aiProgress.current}/${aiProgress.total}` : 'IA Analisando...') : 'Escalar com IA'}
+                 {aiLoading ? (aiProgress ? `Distribuindo ${aiProgress.current}/${aiProgress.total}` : 'Iniciando...') : 'Distribuição Inteligente'}
+              </button>
+
+              <button 
+                onClick={handleRemoteAISchedule}
+                disabled={aiLoading || loading || submitting}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border relative overflow-hidden",
+                  aiLoading || loading || submitting 
+                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
+                    : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 shadow-sm"
+                )}
+              >
+                 <Sparkles className={cn("w-3.5 h-3.5", aiLoading && "animate-pulse")} />
+                 Escalar com IA
               </button>
 
               <button 
