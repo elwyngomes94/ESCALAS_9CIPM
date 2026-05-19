@@ -296,15 +296,16 @@ const CreateEscala = () => {
 
         snap.docs.forEach(d => {
           const log = d.data() as QuotaLog;
+          const qtd = Number(log.quantidade || 0);
           if (log.serviceTypeId) {
-            serviceUsage[log.serviceTypeId] = (serviceUsage[log.serviceTypeId] || 0) + log.quantidade;
+            serviceUsage[log.serviceTypeId] = (serviceUsage[log.serviceTypeId] || 0) + qtd;
           }
-          if (log.tipo === 'OPS') usage.OPS += log.quantidade;
+          if (log.tipo === 'OPS') usage.OPS += qtd;
           else if (log.tipo === 'PJES') {
-            if (log.pjesSubtype === 'MP') usage.PJES_MP += log.quantidade;
-            else if (log.pjesSubtype === 'FORUM') usage.PJES_FORUM += log.quantidade;
-            else if (log.pjesSubtype === 'ESCOLAR') usage.PJES_ESCOLAR += log.quantidade;
-            else if (log.pjesSubtype === 'DECRETO') usage.PJES_DECRETO += log.quantidade;
+            if (log.pjesSubtype === 'MP') usage.PJES_MP += qtd;
+            else if (log.pjesSubtype === 'FORUM') usage.PJES_FORUM += qtd;
+            else if (log.pjesSubtype === 'ESCOLAR') usage.PJES_ESCOLAR += qtd;
+            else if (log.pjesSubtype === 'DECRETO') usage.PJES_DECRETO += qtd;
           }
         });
         setCurrentUsage(usage);
@@ -331,7 +332,7 @@ const CreateEscala = () => {
     if (!service) return;
 
     const dateStr = format(date, 'yyyy-MM-dd');
-    const needed = service.cotasPorServico || 1;
+    const needed = Number(service.cotasPorServico || 1);
     
     // 1. Time Overlap check
     const timeToMinutes = (timeStr: string) => {
@@ -436,7 +437,7 @@ const CreateEscala = () => {
       else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
     }
 
-    if (limit > 0 && used + needed > limit) {
+    if (limit > 0 && Number(used) + needed > limit) {
       alert(`Erro: Cota da UNIDADE insuficiente para ${service.sigla}.`);
       return;
     }
@@ -1404,7 +1405,7 @@ const SortableRow = ({
         // Vacancy check for the selected service on this specific date
         const escalaToday = joinedEscalas.find((e: any) => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
         const slotsUsed = escalaToday?.policemenIds.length || 0;
-        const slotsMax = currentSelectedService?.vagasNecessarias || 0;
+        const slotsMax = Number(currentSelectedService?.vagasNecessarias || 0);
         const isFull = slotsMax > 0 && slotsUsed >= slotsMax;
 
         const isServiceActiveOnThisDay = currentSelectedService ? (
@@ -1457,7 +1458,7 @@ const SortableRow = ({
                 // Vacancy Check for drop
                 const scaleToday = joinedEscalas.find((e: any) => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
                 const used = scaleToday?.policemenIds.length || 0;
-                const max = ds.vagasNecessarias || 0;
+                const max = Number(ds.vagasNecessarias || 0);
                 if (max > 0 && used >= max) {
                   alert(`Este serviço (${ds.sigla}) já atingiu o limite de vagas para este dia.`);
                   return;
@@ -1491,14 +1492,12 @@ const SortableRow = ({
                   date 
                 });
               } else {
-                if (scales.length > 0) {
-                  setAssignmentModal({
-                     policemanId: policemanId,
-                     policemanName: policeman?.nomeGuerra || '',
-                     policemanMat: policeman?.matricula || '',
-                     date: date
-                  });
-                }
+                setAssignmentModal({
+                   policemanId: policemanId,
+                   policemanName: policeman?.nomeGuerra || '',
+                   policemanMat: policeman?.matricula || '',
+                   date: date
+                });
               }
             }}
             className={cn(
@@ -1550,7 +1549,14 @@ const SortableRow = ({
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="w-4 h-4 border-2 border-pmpe-navy/20 border-t-pmpe-navy rounded-full animate-spin" />
                   </div>
-                ) : null}
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center group-matrix-cell">
+                    <span className={cn(
+                      "text-[12px] font-bold transition-all",
+                      selectedServiceId && isServiceActiveOnThisDay ? "text-emerald-600 animate-pulse scale-150" : "text-slate-300"
+                    )}>0</span>
+                  </div>
+                )}
           </td>
         );
       })}
