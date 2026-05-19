@@ -956,8 +956,9 @@ const CreateEscala = () => {
                               }}
                               className={cn(
                                 "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-14 w-14",
-                                !isOrd ? "cursor-pointer" : "bg-slate-800",
-                                scales.length === 0 && !isOrd ? "bg-slate-100/80 hover:bg-slate-200" : "",
+                                !isOrd ? "cursor-pointer" : "bg-pmpe-red shadow-inner",
+                                isWeekend(date) && !isOrd && "bg-slate-50/50",
+                                scales.length === 0 && !isOrd ? "bg-slate-50 hover:bg-slate-200" : "",
                                 selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? (
                                   isFull 
                                     ? "bg-rose-50/70 ring-inset ring-2 ring-rose-500/30 cursor-not-allowed opacity-60" 
@@ -999,7 +1000,10 @@ const CreateEscala = () => {
                                       )}
                                     </div>
                                   ) : isOrd ? (
-                                    <span className="text-white/30 text-[8px] font-black">ORD</span>
+                                    <div className="bg-pmpe-red w-full h-full flex flex-col items-center justify-center text-white">
+                                      <CheckCircle2 className="w-3.5 h-3.5 mb-0.5" />
+                                      <span className="text-[7px] font-black tracking-tighter opacity-80">ORDINÁRIO</span>
+                                    </div>
                                   ) : isFull && selectedServiceId ? (
                                     <div className="w-full h-full flex flex-col items-center justify-center bg-rose-50/50">
                                       <span className="text-[8px] text-rose-500 font-black leading-none mb-0.5">LOTADO</span>
@@ -1046,7 +1050,7 @@ const CreateEscala = () => {
                   <span className="text-[9px] font-black text-slate-500 uppercase">Disponível para Escala</span>
                </div>
                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-slate-800 rounded shadow-sm flex items-center justify-center text-[7px] text-white/40 font-black">ORD</div>
+                  <div className="w-4 h-4 bg-pmpe-red rounded shadow-sm flex items-center justify-center text-[7px] text-white/40 font-black"><CheckCircle2 className="w-2 h-2" /></div>
                   <span className="text-[9px] font-black text-slate-500 uppercase">Serviço Ordinário</span>
                </div>
                <div className="ml-auto flex items-center gap-2">
