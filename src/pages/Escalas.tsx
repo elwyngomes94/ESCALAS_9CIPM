@@ -805,7 +805,12 @@ const Escalas = () => {
                       });
 
                       return (
-                        <div key={service.id} data-type={service.tipo} className="official-report-table bg-white p-1 shadow-2xl border-2 border-slate-200 rounded-lg overflow-x-auto mb-16 last:mb-0">
+                        <div 
+                          key={service.id} 
+                          data-type={service.tipo} 
+                          className="official-report-table bg-white p-1 shadow-2xl border-2 rounded-lg overflow-x-auto mb-16 last:mb-0"
+                          style={{ borderColor: '#e2e8f0' }}
+                        >
                           <div className="min-w-[900px]">
                               <div 
                                 className="text-black font-black text-center py-3 border-2 border-black uppercase text-base"
@@ -820,7 +825,10 @@ const Escalas = () => {
 
                               <table className="w-full border-collapse text-[11px]">
                                 <thead>
-                                  <tr className="bg-sky-100 font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
+                                  <tr 
+                                    className="font-black uppercase text-center border-x-2 border-black border-b-2 border-black"
+                                    style={{ backgroundColor: '#e0f2fe' }}
+                                  >
                                     <th className="border-r-2 border-black py-2 px-1 w-[12%]">GRADUAÇÃO</th>
                                     <th className="border-r-2 border-black py-2 px-1 w-[12%]">MATRÍCULA</th>
                                     <th className="border-r-2 border-black py-2 px-1">NOME DE GUERRA</th>
@@ -1342,7 +1350,12 @@ const Escalas = () => {
                   <tr key={idx} className="border-x-2 border-b-2 border-black text-center font-black">
                     <td className="border-r-2 border-black py-2.5">{pol.graduacaoPosto}</td>
                     <td className="border-r-2 border-black py-2.5">{pol.matricula}</td>
-                    <td className="border-r-2 border-black py-2.5 text-left px-8 uppercase text-pmpe-navy">{pol.nomeGuerra}</td>
+                    <td 
+                      className="border-r-2 border-black py-2.5 text-left px-8 uppercase"
+                      style={{ color: '#002147' }}
+                    >
+                      {pol.nomeGuerra}
+                    </td>
                     <td className="border-r-2 border-black py-2.5 font-bold">9ª CIPM</td>
                     <td className="border-r-2 border-black py-2.5">
                       {idx === 0 ? 'CMDT' : pol.isMotorista ? 'MOT' : 'PATRUL.'}
@@ -1355,11 +1368,19 @@ const Escalas = () => {
             {scaleToPrint.observations && (
               <div className="mt-6 p-4 border-2 border-black">
                 <p className="text-[11px] font-black uppercase mb-1 underline">Observações:</p>
-                <p className="text-[13px] font-bold text-slate-800 whitespace-pre-wrap">{scaleToPrint.observations}</p>
+                <p 
+                  className="text-[13px] font-bold whitespace-pre-wrap"
+                  style={{ color: '#1e293b' }}
+                >
+                  {scaleToPrint.observations}
+                </p>
               </div>
             )}
 
-            <div className="mt-12 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-t-2 border-black pt-2">
+            <div 
+              className="mt-12 text-center text-[10px] font-black uppercase tracking-[0.2em] border-t-2 border-black pt-2"
+              style={{ color: '#94a3b8' }}
+            >
                Sistema Integrado de Escalas (CIPM/9) – {format(new Date(), 'dd/MM/yyyy HH:mm')}
             </div>
           </div>
