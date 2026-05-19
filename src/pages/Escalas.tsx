@@ -820,7 +820,7 @@ const Escalas = () => {
 
                               <table className="w-full border-collapse text-[11px]">
                                 <thead>
-                                  <tr className="bg-white font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
+                                  <tr className="bg-sky-100 font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
                                     <th className="border-r-2 border-black py-2 px-1 w-[12%]">GRADUAÇÃO</th>
                                     <th className="border-r-2 border-black py-2 px-1 w-[12%]">MATRÍCULA</th>
                                     <th className="border-r-2 border-black py-2 px-1">NOME DE GUERRA</th>
