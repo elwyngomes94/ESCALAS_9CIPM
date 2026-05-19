@@ -17,7 +17,7 @@ export interface Policeman {
   matricula: string;
   numeral: string;
   antiguidade: number;
-  telefone: string;
+  telefone?: string;
   isMotorista?: boolean;
   pelotao: string;
   situacao: string;

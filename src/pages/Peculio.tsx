@@ -21,10 +21,6 @@ import {
   Trash2, 
   X, 
   Save, 
-  User, 
-  Phone, 
-  CreditCard, 
-  Building2,
   ChevronRight,
   Filter,
   Users,
@@ -72,7 +68,6 @@ const Peculio = () => {
     matricula: '',
     numeral: '',
     antiguidade: 0,
-    telefone: '',
     isMotorista: false,
     pelotao: '1º PEL',
     pjesCotasMax: 10,
@@ -139,7 +134,6 @@ const Peculio = () => {
         matricula: '',
         numeral: '',
         antiguidade: 0,
-        telefone: '',
         isMotorista: false,
         pelotao: '1º PEL',
         pjesCotasMax: 10,
@@ -214,7 +208,6 @@ const Peculio = () => {
         matricula: p.matricula,
         numeral: p.numeral || '',
         antiguidade: p.antiguidade || 0,
-        telefone: p.telefone,
         isMotorista: p.isMotorista || false,
         pelotao: p.pelotao || '1º PEL',
         pjesCotasMax: p.pjesCotasMax || 10,
@@ -230,7 +223,6 @@ const Peculio = () => {
         matricula: '',
         numeral: '',
         antiguidade: 0,
-        telefone: '',
         isMotorista: false,
         pelotao: '1º PEL',
         pjesCotasMax: 10,
@@ -335,7 +327,6 @@ const Peculio = () => {
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Policial</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Matrícula</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Graduação</th>
-                <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Telefone</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Situação</th>
                 {isAdmin && <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Ações</th>}
               </tr>
@@ -373,7 +364,6 @@ const Peculio = () => {
                     </span>
                     {p.antiguidade > 0 && <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Antiguidade: {p.antiguidade}</p>}
                   </td>
-                  <td className="px-6 py-3 text-[11px] font-medium text-slate-500">{p.telefone}</td>
                   <td className="px-6 py-3 text-center">
                     <span className={cn(
                       "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border",
@@ -647,16 +637,6 @@ const Peculio = () => {
                       className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
                       value={formData.antiguidade}
                       onChange={(e) => setFormData({ ...formData, antiguidade: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Telefone</label>
-                    <input
-                      required
-                      type="text"
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
-                      value={formData.telefone}
-                      onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                     />
                   </div>
                   <div>

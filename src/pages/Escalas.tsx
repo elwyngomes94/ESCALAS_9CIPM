@@ -183,7 +183,6 @@ const Escalas = () => {
         'Posto/Graduação': p.graduacaoPosto,
         'Nome de Guerra': p.nomeGuerra,
         'Matrícula': p.matricula,
-        'Telefone': p.telefone,
         'Cidade': esc.service?.cidade,
         'Início': esc.service?.horarioInicio,
         'Término': esc.service?.horarioTermino
