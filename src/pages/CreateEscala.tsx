@@ -322,6 +322,14 @@ const CreateEscala = () => {
     let end1 = timeToMinutes(service.horarioTermino);
     if (end1 <= start1) end1 += 1440; // Turno virando o dia
 
+    // 0. Ordinary Service Conflict Check
+    const dayNum = getDate(date);
+    const isOrdinary = (ordinarySchedules[policemanId] || []).includes(dayNum);
+    if (isOrdinary) {
+      alert(`Erro: O policial já está escalado no Serviço Ordinário nesta data. Não é permitido escala extra em dias de serviço ordinário.`);
+      return;
+    }
+
     const overlappingScale = joinedEscalas.find(e => {
       const eDateStr = format(e.date.toDate(), 'yyyy-MM-dd');
       if (eDateStr !== dateStr) return false;
@@ -925,7 +933,11 @@ const CreateEscala = () => {
                                 }
                               }}
                               onClick={() => {
-                                if (isOrd || submitting) return;
+                                if (submitting) return;
+                                if (isOrd) {
+                                  alert('Este policial está em SERVIÇO ORDINÁRIO nesta data. Escala extra não permitida.');
+                                  return;
+                                }
                                 if (selectedServiceId) {
                                   if (!isServiceActiveOnThisDay) {
                                     alert('Este serviço não está configurado para estar ativo nesta data.');

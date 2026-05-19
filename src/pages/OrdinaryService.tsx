@@ -115,6 +115,21 @@ const OrdinaryService = () => {
   };
 
   const toggleDay = (policemanId: string, day: number) => {
+    const isAdding = !(schedules[policemanId] || []).includes(day);
+    if (isAdding) {
+      const dayDate = daysInMonth.find(d => getDate(d) === day);
+      const hasExtraScale = escalas.some(e => 
+        e.policemenIds.includes(policemanId) && 
+        dayDate && isSameDay(e.date.toDate(), dayDate)
+      );
+      
+      if (hasExtraScale) {
+        if (!window.confirm("Este policial já possui uma escala EXTRA (PJES/OPS) nesta data. Marcar como ORDINÁRIO gerará um conflito. Deseja continuar?")) {
+          return;
+        }
+      }
+    }
+
     setSchedules(prev => {
       const currentDays = prev[policemanId] || [];
       const newDays = currentDays.includes(day)
