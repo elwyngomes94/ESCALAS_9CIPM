@@ -661,14 +661,121 @@ const CreateEscala = () => {
 
   const [aiProgress, setAiProgress] = useState<{ current: number, total: number } | null>(null);
 
-  const handleRemoteAISchedule = async (fairMode = false) => {
+  const handleFairDistribution = async () => {
+    if (!isAdmin || submitting || loading) return;
+    if (!window.confirm("Deseja realizar a Distribuição Justa local? O sistema preencherá as vagas priorizando quem tem MENOS escalas no mês, garantindo equilíbrio entre os voluntários.")) return;
+
+    setLoading(true);
+    try {
+      const activeTabEnum = activeTab as 'PJES' | 'OPS';
+      const targetServices = services.filter(s => s.month === mKey && s.tipo?.toUpperCase() === activeTab);
+      const batchLog: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date }[] = [];
+      
+      const localAssignments = [...joinedEscalas];
+      
+      const getCounts = () => {
+        const counts: Record<string, number> = {};
+        joinedVolunteers.forEach(v => {
+          counts[v.policemanId!] = localAssignments.filter(e => 
+            e.policemenIds.includes(v.policemanId!) && e.service?.tipo?.toUpperCase() === activeTab
+          ).length;
+        });
+        return counts;
+      };
+
+      for (const day of days) {
+        const dayStr = format(day, 'yyyy-MM-dd');
+        for (const service of targetServices) {
+          const currentE = localAssignments.find(e => 
+            e.serviceTypeId === service.id && 
+            format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd') === dayStr
+          );
+          
+          let filled = currentE?.policemenIds.length || 0;
+          const totalNeeded = service.vagasNecessarias || 0;
+
+          while (filled < totalNeeded) {
+            const currentCounts = getCounts();
+            
+            const candidates = joinedVolunteers
+              .filter(v => v.type?.toUpperCase() === activeTab)
+              .filter(v => {
+                const pid = v.policemanId!;
+                if ((ordinarySchedules[pid] || []).includes( getDate(day) )) return false;
+                if (currentE?.policemenIds.includes(pid)) return false;
+
+                const hasConflict = localAssignments.some(e => {
+                  const eDateStr = format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd');
+                  if (eDateStr !== dayStr) return false;
+                  if (!e.policemenIds.includes(pid)) return false;
+                  if (service.tipo === 'PJES' && e.service?.tipo === 'PJES') return true;
+                  return false;
+                });
+                
+                if (hasConflict) return false;
+
+                const currentUsed = currentCounts[pid] || 0;
+                if (service.tipo === 'PJES' && currentUsed >= (v.cotas || 0)) return false;
+
+                return true;
+              })
+              .sort((a, b) => {
+                const countA = currentCounts[a.policemanId!] || 0;
+                const countB = currentCounts[b.policemanId!] || 0;
+                if (countA !== countB) return countA - countB;
+                return (a.policeman?.antiguidade || 999) - (b.policeman?.antiguidade || 999);
+              });
+
+            if (candidates.length === 0) break;
+
+            const chosen = candidates[0];
+            const success = await handleAssignService(service.id, {
+              policemanId: chosen.policemanId!,
+              date: day
+            }, false, true);
+
+            if (success) {
+              batchLog.push({ action: 'ASSIGN', serviceId: service.id, policemanId: chosen.policemanId!, date: day });
+              
+              if (currentE) {
+                currentE.policemenIds.push(chosen.policemanId!);
+              } else {
+                localAssignments.push({
+                  serviceTypeId: service.id,
+                  policemenIds: [chosen.policemanId!],
+                  date: day,
+                  service: service
+                } as any);
+              }
+              filled++;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+
+      if (batchLog.length > 0) {
+        setUndoStack(prev => [{ 
+          action: 'BATCH_AI', 
+          data: { batch: batchLog } 
+        }, ...prev.slice(0, 19)]);
+        alert(`${batchLog.length} escalas distribuídas com sucesso localmente.`);
+      } else {
+        alert("Não foram encontradas vagas passíveis de distribuição.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro na distribuição: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoteAISchedule = async () => {
     if (!isAdmin || aiLoading) return;
     
-    const confirmMsg = fairMode 
-      ? "Deseja utilizar a Inteligência Artificial para realizar uma DISTRIBUIÇÃO JUSTA? A IA tentará equilibrar o número de escalas para todos os voluntários, ignorando a antiguidade."
-      : "Deseja utilizar a Inteligência Artificial para sugerir escalas para as vagas ociosas? As regras de antiguidade, cotas e conflitos serão respeitadas.";
-
-    if (!window.confirm(confirmMsg)) return;
+    if (!window.confirm("Deseja utilizar a Inteligência Artificial para analisar as vagas e sugerir escalas? O modelo buscará otimizar o preenchimento mantendo o equilíbrio.")) return;
 
     setAiLoading(true);
     setAiProgress(null);
@@ -684,14 +791,7 @@ const CreateEscala = () => {
             cotas: v.cotas,
             type: v.type
           })),
-          services: services.filter(s => {
-            const matchesMonth = s.month === mKey;
-            // If fairMode is true, we might want to ONLY distribute for the current activeTab type
-            if (fairMode) {
-               return matchesMonth && s.tipo?.toUpperCase() === activeTab;
-            }
-            return matchesMonth;
-          }).map(s => ({
+          services: services.filter(s => s.month === mKey).map(s => ({
             id: s.id,
             sigla: s.sigla,
             nome: s.nome,
@@ -716,7 +816,7 @@ const CreateEscala = () => {
           ),
           quotaSettings: unitQuotas,
           currentMonth: mKey,
-          fairMode: fairMode
+          fairMode: true
         })
       });
 
@@ -994,21 +1094,21 @@ const CreateEscala = () => {
               </button>
 
               <button 
-                onClick={() => handleRemoteAISchedule(true)}
-                disabled={aiLoading}
+                onClick={handleFairDistribution}
+                disabled={loading || submitting}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border relative overflow-hidden",
-                  aiLoading 
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
+                  loading || submitting
                     ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
                     : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
                 )}
               >
                  <BarChart3 className="w-3.5 h-3.5" />
-                 Distribuir Justamente
+                 Distribuição Justa
               </button>
 
               <button 
-                onClick={() => handleRemoteAISchedule(false)}
+                onClick={() => handleRemoteAISchedule()}
                 disabled={aiLoading}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border relative overflow-hidden",
