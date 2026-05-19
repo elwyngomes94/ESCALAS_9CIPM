@@ -659,11 +659,14 @@ const CreateEscala = () => {
     }
   };
 
+  const [aiProgress, setAiProgress] = useState<{ current: number, total: number } | null>(null);
+
   const handleRemoteAISchedule = async () => {
     if (!isAdmin || aiLoading) return;
     if (!window.confirm("Deseja utilizar a Inteligência Artificial para sugerir escalas para as vagas ociosas? As regras de antiguidade, cotas e conflitos serão respeitadas.")) return;
 
     setAiLoading(true);
+    setAiProgress(null);
     try {
       const response = await fetch('/api/ai/schedule', {
         method: 'POST',
@@ -700,27 +703,31 @@ const CreateEscala = () => {
         })
       });
 
-      if (!response.ok) throw new Error('Falha na resposta da IA');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Falha na resposta da IA');
+      }
+      
       const data = await response.json();
 
       if (data.assignments && data.assignments.length > 0) {
         let count = 0;
-        const batchLog: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date }[] = [];
-        
-        // We'll use a local shadow to track assignments within this loop to avoid stale state issues
-        const localAssignments = [...joinedEscalas];
-        const localUsage = { ...currentUsage };
+        const total = data.assignments.length;
+        setAiProgress({ current: 0, total });
 
-        for (const assignment of data.assignments) {
+        const batchLog: { action: 'ASSIGN' | 'REMOVE', serviceId: string, policemanId: string, date: Date }[] = [];
+        const localAssignments = [...joinedEscalas];
+
+        for (let i = 0; i < data.assignments.length; i++) {
+          const assignment = data.assignments[i];
+          setAiProgress({ current: i + 1, total });
+
           try {
             const d = new Date(assignment.date + 'T12:00:00');
             const dateStr = format(d, 'yyyy-MM-dd');
             const service = services.find(s => s.id === assignment.serviceId);
             if (!service) continue;
 
-            const needed = service.cotasPorServico || 1;
-            
-            // Local Validation (to solve stale state)
             const dayNum = getDate(d);
             if ((ordinarySchedules[assignment.policemanId] || []).includes(dayNum)) continue;
 
@@ -728,13 +735,11 @@ const CreateEscala = () => {
               const eDateStr = format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd');
               if (eDateStr !== dateStr) return false;
               if (!e.policemenIds.includes(assignment.policemanId)) return false;
-              // Simple conflict check (could be more complex with hours, but for AI we trust model or do basic type check)
               if (service.tipo === 'PJES' && e.service?.tipo === 'PJES') return true;
               return false;
             });
             if (hasConflict) continue;
 
-            // Vacancy check
             const existingInD = localAssignments.find(e => e.serviceTypeId === assignment.serviceId && format(e.date.toDate ? e.date.toDate() : e.date, 'yyyy-MM-dd') === dateStr);
             if (existingInD && existingInD.policemenIds.length >= (service.vagasNecessarias || 0)) continue;
 
@@ -747,7 +752,6 @@ const CreateEscala = () => {
               count++;
               batchLog.push({ action: 'ASSIGN', serviceId: assignment.serviceId, policemanId: assignment.policemanId, date: d });
               
-              // Update local shadow
               if (existingInD) {
                 existingInD.policemenIds.push(assignment.policemanId);
               } else {
@@ -780,6 +784,7 @@ const CreateEscala = () => {
       alert("Erro ao processar escala via IA: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setAiLoading(false);
+      setAiProgress(null);
     }
   };
 
@@ -975,14 +980,20 @@ const CreateEscala = () => {
                 onClick={handleRemoteAISchedule}
                 disabled={aiLoading}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border relative overflow-hidden",
                   aiLoading 
                     ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
                     : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
                 )}
               >
+                 {aiLoading && aiProgress && (
+                   <div 
+                     className="absolute bottom-0 left-0 h-1 bg-emerald-400 transition-all duration-300" 
+                     style={{ width: `${(aiProgress.current / aiProgress.total) * 100}%` }}
+                   />
+                 )}
                  <Sparkles className={cn("w-3.5 h-3.5", aiLoading && "animate-pulse")} />
-                 {aiLoading ? 'IA Processando...' : 'Escalar com IA'}
+                 {aiLoading ? (aiProgress ? `Processando ${aiProgress.current}/${aiProgress.total}` : 'IA Analisando...') : 'Escalar com IA'}
               </button>
 
               <button 

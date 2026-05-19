@@ -71,7 +71,7 @@ async function startServer() {
       `;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3-flash-preview",
         config: {
           systemInstruction,
           responseMimeType: "application/json",
@@ -85,7 +85,7 @@ async function startServer() {
                   properties: {
                     policemanId: { type: Type.STRING },
                     serviceId: { type: Type.STRING },
-                    date: { type: Type.STRING }
+                    date: { type: Type.STRING, description: "Format: YYYY-MM-DD" }
                   },
                   required: ["policemanId", "serviceId", "date"]
                 }
@@ -100,17 +100,16 @@ async function startServer() {
 
       let text = response.text || '{}';
       // Clean potential markdown blocks
-      if (text.includes("```")) {
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      }
+      text = text.replace(/```json/g, "").replace(/```/g, "").trim();
       
-      console.log("AI Response received:", text.substring(0, 500));
+      console.log("AI Response received (length):", text.length);
       
       try {
         const parsed = JSON.parse(text);
+        if (!parsed.assignments) parsed.assignments = [];
         res.json(parsed);
       } catch (parseError) {
-        console.error("Failed to parse AI JSON:", text);
+        console.error("Failed to parse AI JSON. Content preview:", text.substring(0, 200));
         res.status(500).json({ error: "O modelo retornou um formato inválido. Tente novamente." });
       }
     } catch (error) {
