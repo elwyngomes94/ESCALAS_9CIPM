@@ -282,11 +282,20 @@ const OrdinaryService = () => {
                 <th className="sticky left-0 bg-slate-50 z-20 px-6 py-4 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest border-r border-slate-200 min-w-[200px]">
                   Policial
                 </th>
-                {daysInMonth.map(day => (
-                  <th key={getDate(day)} className="px-2 py-4 text-center text-[10px] font-black text-slate-500 uppercase min-w-[32px] border-r border-slate-100 last:border-r-0">
-                    {getDate(day)}
-                  </th>
-                ))}
+                {daysInMonth.map(day => {
+                  const wknd = isWeekend(day);
+                  return (
+                    <th 
+                      key={getDate(day)} 
+                      className={cn(
+                        "px-2 py-4 text-center text-[10px] font-black uppercase min-w-[32px] border-r border-slate-100 last:border-r-0",
+                        wknd ? "text-pmpe-red bg-pmpe-red/5" : "text-slate-500"
+                      )}
+                    >
+                      {getDate(day)}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -313,6 +322,7 @@ const OrdinaryService = () => {
                     {daysInMonth.map(day => {
                       const d = getDate(day);
                       const isSelected = (schedules[p.id!] || []).includes(d);
+                      const wknd = isWeekend(day);
                       
                       // Check for PJES/OPS scales
                       const scaledExteriors = escalas.filter(e => 
@@ -326,7 +336,10 @@ const OrdinaryService = () => {
                       return (
                         <td 
                           key={d} 
-                          className="p-1 border-r border-slate-100 last:border-r-0 text-center"
+                          className={cn(
+                            "p-1 border-r border-slate-100 last:border-r-0 text-center",
+                            wknd && "bg-slate-50/50"
+                          )}
                         >
                           <div className="relative inline-block">
                             <button
