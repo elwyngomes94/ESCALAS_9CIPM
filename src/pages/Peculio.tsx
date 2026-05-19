@@ -59,7 +59,7 @@ const Peculio = () => {
   const [aiProcessing, setAiProcessing] = useState(false);
   const [aiPreviewData, setAiPreviewData] = useState<Omit<Policeman, 'id' | 'createdAt'>[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'motorista' | 'ativo' | 'inativo' | 'afastado'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'motorista' | 'ativo' | 'inativo' | 'ferias' | 'licenca'>('all');
   
   const [formData, setFormData] = useState<Omit<Policeman, 'id'>>({
     nomeCompleto: '',
@@ -187,6 +187,18 @@ const Peculio = () => {
     }
   };
 
+  const handleToggleStatus = async (id: string, field: 'isMotorista' | 'situacao', value: any) => {
+    try {
+      await updateDoc(doc(db, 'policemen', id), {
+        [field]: value,
+        updatedAt: serverTimestamp()
+      });
+      setPolicemen(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+    } catch (err) {
+      console.error("Erro ao atualizar status:", err);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!window.confirm('Deseja realmente excluir este policial?')) return;
     try {
@@ -242,7 +254,8 @@ const Peculio = () => {
     if (filterType === 'motorista') return matchesSearch && p.isMotorista;
     if (filterType === 'ativo') return matchesSearch && p.situacao === 'Ativo';
     if (filterType === 'inativo') return matchesSearch && p.situacao === 'Inativo';
-    if (filterType === 'afastado') return matchesSearch && !['Ativo', 'Inativo'].includes(p.situacao);
+    if (filterType === 'ferias') return matchesSearch && p.situacao === 'Férias';
+    if (filterType === 'licenca') return matchesSearch && p.situacao === 'Licença';
     
     return matchesSearch;
   });
@@ -274,13 +287,14 @@ const Peculio = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
           { id: 'all', label: "Total Efetivo", value: policemen.length, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
           { id: 'ativo', label: "Ativos", value: policemen.filter(p => p.situacao === 'Ativo').length, icon: UserCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
           { id: 'motorista', label: "Motoristas", value: policemen.filter(p => p.isMotorista).length, icon: Car, color: "text-purple-600", bg: "bg-purple-50" },
+          { id: 'ferias', label: "Férias", value: policemen.filter(p => p.situacao === 'Férias').length, icon: Sparkles, color: "text-amber-600", bg: "bg-amber-50" },
+          { id: 'licenca', label: "Licença", value: policemen.filter(p => p.situacao === 'Licença').length, icon: Shield, color: "text-rose-600", bg: "bg-rose-50" },
           { id: 'inativo', label: "Inativos", value: policemen.filter(p => p.situacao === 'Inativo').length, icon: Filter, color: "text-slate-400", bg: "bg-slate-50" },
-          { id: 'afastado', label: "Afastados", value: policemen.filter(p => !['Ativo', 'Inativo'].includes(p.situacao)).length, icon: Shield, color: "text-amber-600", bg: "bg-amber-50" },
         ].map((stat) => (
           <button 
             key={stat.id} 
@@ -327,6 +341,7 @@ const Peculio = () => {
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Policial</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Matrícula</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Graduação</th>
+                <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Status Rápido</th>
                 <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Situação</th>
                 {isAdmin && <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Ações</th>}
               </tr>
@@ -364,12 +379,57 @@ const Peculio = () => {
                     </span>
                     {p.antiguidade > 0 && <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Antiguidade: {p.antiguidade}</p>}
                   </td>
+                  <td className="px-6 py-3">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        disabled={!isAdmin}
+                        onClick={() => handleToggleStatus(p.id!, 'isMotorista', !p.isMotorista)}
+                        className={cn(
+                          "w-7 h-7 rounded-lg flex items-center justify-center transition-all border shadow-sm",
+                          p.isMotorista 
+                            ? "bg-purple-500 border-purple-600 text-white" 
+                            : "bg-white border-slate-200 text-slate-400 hover:border-purple-300 hover:text-purple-500"
+                        )}
+                        title={p.isMotorista ? "Remover Quadro de Motorista" : "Marcar como Motorista"}
+                      >
+                        <Car className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        disabled={!isAdmin}
+                        onClick={() => handleToggleStatus(p.id!, 'situacao', p.situacao === 'Férias' ? 'Ativo' : 'Férias')}
+                        className={cn(
+                          "w-7 h-7 rounded-lg flex items-center justify-center transition-all border shadow-sm",
+                          p.situacao === 'Férias'
+                            ? "bg-amber-500 border-amber-600 text-white" 
+                            : "bg-white border-slate-200 text-slate-400 hover:border-amber-300 hover:text-amber-500"
+                        )}
+                        title={p.situacao === 'Férias' ? "Remover Férias" : "Colocar em Férias"}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        disabled={!isAdmin}
+                        onClick={() => handleToggleStatus(p.id!, 'situacao', p.situacao === 'Licença' ? 'Ativo' : 'Licença')}
+                        className={cn(
+                          "w-7 h-7 rounded-lg flex items-center justify-center transition-all border shadow-sm",
+                          p.situacao === 'Licença'
+                            ? "bg-rose-500 border-rose-600 text-white" 
+                            : "bg-white border-slate-200 text-slate-400 hover:border-rose-300 hover:text-rose-500"
+                        )}
+                        title={p.situacao === 'Licença' ? "Remover Licença" : "Colocar em Licença"}
+                      >
+                        <Shield className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-6 py-3 text-center">
                     <span className={cn(
-                      "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border",
+                      "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border whitespace-nowrap",
                       p.situacao === 'Ativo' ? "bg-green-50 text-green-700 border-green-100" : 
-                      p.situacao === 'Inativo' ? "bg-red-50 text-red-700 border-red-100" :
-                      "bg-slate-50 text-slate-500 border-slate-100"
+                      p.situacao === 'Inativo' ? "bg-slate-100 text-slate-600 border-slate-200" :
+                      p.situacao === 'Férias' ? "bg-amber-50 text-amber-700 border-amber-100" :
+                      p.situacao === 'Licença' ? "bg-rose-50 text-rose-700 border-rose-100" :
+                      "bg-blue-50 text-blue-700 border-blue-100"
                     )}>
                       {p.situacao}
                     </span>
