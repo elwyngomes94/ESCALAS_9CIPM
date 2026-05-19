@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Inter", sans-serif;
   --color-pmpe-navy: #002147;
   --color-pmpe-gold: #D4AF37;
   --color-pmpe-red: #dc2626;
@@ -22,6 +23,11 @@
     @apply bg-slate-50 text-slate-800 font-sans antialiased;
     font-size: 14px;
   }
+}
+
+.custom-matrix-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #D4AF37 #002147;
 }
 
 .sidebar-gradient {

@@ -23,13 +23,13 @@ const SidebarItem = ({ to, icon: Icon, label, active, onClick }: any) => (
     to={to}
     onClick={onClick}
     className={cn(
-      "flex items-center gap-3 px-6 py-2.5 transition-all duration-200 text-sm font-medium border-l-4",
+      "flex items-center gap-3 px-6 py-3 transition-all duration-300 text-[11px] font-black uppercase tracking-widest border-l-4",
       active 
-        ? "bg-white/10 border-pmpe-red text-white" 
-        : "text-white/60 hover:text-white hover:bg-white/5 border-transparent"
+        ? "bg-white/5 border-pmpe-gold text-white shadow-[inset_4px_0_10px_-5px_rgba(212,175,55,0.3)]" 
+        : "text-white/40 hover:text-white hover:bg-white/5 border-transparent"
     )}
   >
-    <Icon className={cn("w-4 h-4", active ? "text-pmpe-red" : "")} />
+    <Icon className={cn("w-4 h-4 transition-transform duration-300", active ? "text-pmpe-gold scale-110" : "group-hover:scale-110")} />
     <span>{label}</span>
   </Link>
 );
@@ -42,7 +42,12 @@ const Layout = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-pmpe-navy">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-pmpe-gold border-t-transparent"></div>
+        <div className="relative">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-white/10 border-t-pmpe-gold"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+             <span className="text-[10px] font-black text-pmpe-gold">9ª</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -51,24 +56,24 @@ const Layout = () => {
   const displayEmail = profile?.email || 'Visitante';
 
   const navigation = [
-    { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/", icon: LayoutDashboard, label: "Painel de Comando" },
     { to: "/escalas", icon: ClipboardList, label: "Visualizar Escalas" },
   ];
 
   if (isAdmin) {
     navigation.push(
-      { to: "/peculio", icon: Users, label: "Pecúlio (Efetivo)" },
+      { to: "/peculio", icon: Users, label: "Efetivo (Pecúlio)" },
       { to: "/escala-ordinaria", icon: Calendar, label: "Escala Ordinária" },
       { to: "/servicos", icon: Briefcase, label: "Tipos de Serviço" },
       { to: "/cotas", icon: Shield, label: "Controle de Cotas" },
       { to: "/voluntarios-pjes", icon: UserPlus, label: "Voluntários PJES" },
       { to: "/voluntarios-ops", icon: UserPlus, label: "Voluntários OPS" },
-      { to: "/criar-escala", icon: Shield, label: "Criar Escalas" }
+      { to: "/criar-escala", icon: Shield, label: "Gestão de Escalas" }
     );
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-slate-50">
+    <div className="h-screen flex overflow-hidden bg-slate-50 font-sans">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {isSidebarOpen && (
@@ -77,42 +82,45 @@ const Layout = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            className="fixed inset-0 bg-pmpe-navy/60 backdrop-blur-sm z-40 lg:hidden"
           />
         )}
       </AnimatePresence>
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 sidebar-gradient text-white flex flex-col transform transition-transform duration-300 lg:relative lg:translate-x-0 shrink-0",
+        "fixed inset-y-0 left-0 z-50 w-72 bg-pmpe-navy text-white flex flex-col transform transition-transform duration-500 lg:relative lg:translate-x-0 shrink-0 shadow-2xl border-r border-white/5",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="p-6 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-inner border-2 border-pmpe-gold/20 overflow-hidden p-1">
-              <img 
-                src="/logo_9cipm.png" 
-                alt="9ª CIPM Logo"
-                className="w-full h-full object-contain"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  // Fallback para texto caso a imagem não exista
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement;
-                  if (parent) {
-                    parent.innerHTML = '<span class="text-pmpe-navy font-bold text-lg italic">9</span>';
-                  }
-                }}
-              />
-            </div>
-            <div>
-              <h1 className="text-xs font-bold uppercase tracking-wider leading-tight">9ª CIPM - PMPE</h1>
-              <p className="text-[10px] text-white/60">Escalas Extras</p>
-            </div>
+        {/* Sidebar Interior Shadow/Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40 pointer-events-none" />
+
+        <div className="p-8 border-b border-white/10 relative z-10 flex flex-col items-center gap-4">
+          <motion.div 
+            whileHover={{ scale: 1.05 }}
+            className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl border-2 border-pmpe-gold/40 p-2 overflow-hidden"
+          >
+            <img 
+              src="/logo_9cipm.png" 
+              alt="9ª CIPM Logo"
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const parent = e.currentTarget.parentElement;
+                if (parent) {
+                  parent.innerHTML = '<span class="text-pmpe-navy font-black text-3xl">9</span>';
+                }
+              }}
+            />
+          </motion.div>
+          <div className="text-center">
+            <h1 className="text-sm font-black uppercase tracking-[0.2em] leading-tight text-pmpe-gold">9ª CIPM - PMPE</h1>
+            <p className="text-[9px] text-white/40 uppercase font-bold tracking-widest mt-1">Companhia Independente</p>
           </div>
         </div>
 
-        <nav className="flex-1 py-4 overflow-y-auto">
+        <nav className="flex-1 py-6 overflow-y-auto relative z-10 custom-matrix-scroll">
           {navigation.map((item) => (
             <SidebarItem
               key={item.to}
@@ -123,66 +131,82 @@ const Layout = () => {
           ))}
         </nav>
 
-        <div className="p-4 bg-black/20">
-          <div className="flex items-center gap-3 px-2 mb-4">
-            <div className="w-8 h-8 rounded bg-pmpe-red flex items-center justify-center text-[10px] font-bold">
+        <div className="p-6 bg-black/30 relative z-10 border-t border-white/5">
+          <div className="flex items-center gap-4 px-2 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pmpe-navy to-slate-900 border border-white/10 flex items-center justify-center text-xs font-black text-pmpe-gold shadow-lg shadow-black/40">
               {displayEmail.substring(0, 2).toUpperCase()}
             </div>
             <div className="overflow-hidden">
-              <p className="text-[11px] font-bold truncate leading-none mb-1">{displayEmail.split('@')[0]}</p>
-              <p className="text-[9px] text-white/50 uppercase tracking-tighter">Administrador</p>
+              <p className="text-[11px] font-black truncate leading-none mb-1 text-white uppercase tracking-wider">{displayEmail.split('@')[0]}</p>
+              <p className="text-[8px] text-pmpe-gold font-bold uppercase tracking-[0.2em]">{isAdmin ? 'Comandante/Adm' : 'Operador'}</p>
             </div>
           </div>
           {user && (
             <button
               onClick={() => auth.signOut()}
-              className="flex items-center gap-3 w-full px-4 py-2 rounded text-[11px] font-bold uppercase tracking-widest text-white/50 hover:text-white hover:bg-white/5 transition-all"
+              className="group flex items-center justify-center gap-3 w-full px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.3em] text-white/40 hover:text-white hover:bg-red-600/20 hover:border-red-600/40 border border-transparent transition-all"
             >
-              <LogOut className="w-4 h-4" />
-              <span>Sair</span>
+              <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              <span>Sair do Sistema</span>
             </button>
           )}
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm">
-          <div className="flex items-center gap-4">
+        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-10 shadow-sm z-30">
+          <div className="flex items-center gap-6">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 text-slate-500 lg:hidden hover:bg-slate-100 rounded-lg"
+              className="p-3 -ml-2 text-slate-500 lg:hidden hover:bg-slate-100 rounded-2xl transition-colors"
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-tighter hidden sm:block">
-              {navigation.find(n => n.to === location.pathname)?.label || 'Painel de Controle'}
-            </h2>
+            <div className="hidden lg:flex flex-col">
+               <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Localização Atual</h2>
+               <h3 className="text-sm font-black text-pmpe-navy uppercase tracking-tighter">
+                 {navigation.find(n => n.to === location.pathname)?.label || 'Gestão Operacional'}
+               </h3>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <span className="px-3 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-widest border border-green-100">
-              Sistema Ativo
-            </span>
-            <div className="h-6 w-px bg-slate-200"></div>
-            <div className="text-right hidden sm:block">
-              <span className="text-[10px] text-slate-500 font-bold uppercase block leading-none">Usuário</span>
-              <span className="text-xs font-bold text-pmpe-navy">{displayEmail}</span>
+          <div className="flex items-center gap-6">
+            <div className="hidden md:flex flex-col items-end">
+               <span className="text-[9px] text-slate-400 font-black uppercase tracking-[0.2em] mb-1">Status de Conexão</span>
+               <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black rounded-full uppercase tracking-widest border border-emerald-100 flex items-center gap-2">
+                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                 Servidor Online
+               </span>
+            </div>
+            <div className="h-10 w-px bg-slate-200"></div>
+            <div className="flex items-center gap-4 group cursor-pointer">
+              <div className="text-right hidden sm:block">
+                <span className="text-[9px] text-slate-400 font-black uppercase tracking-[0.1em] block leading-none mb-1">Identificação</span>
+                <span className="text-xs font-black text-pmpe-navy tracking-tight group-hover:text-pmpe-gold transition-colors">{displayEmail}</span>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center p-2 group-hover:border-pmpe-gold transition-colors shadow-sm overflow-hidden">
+                 <img src="/logo_9cipm.png" alt="PMPE" className="w-full h-full object-contain grayscale group-hover:grayscale-0 transition-all opacity-40 group-hover:opacity-100" />
+              </div>
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto bg-slate-50 scroll-smooth">
-          <div className="p-6 md:p-8 max-w-full">
+        <div className="flex-1 overflow-y-auto bg-slate-50 scroll-smooth custom-matrix-scroll">
+          <div className="p-8 md:p-10 max-w-full">
              <Outlet />
           </div>
         </div>
 
-        <footer className="h-10 bg-white border-t border-slate-200 flex items-center justify-between px-8 text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-          <span className="hidden sm:inline">9ª CIPM - COMPANHIA INDEPENDENTE DE POLÍCIA MILITAR</span>
+        <footer className="h-12 bg-white border-t border-slate-200 flex items-center justify-between px-10 text-[9px] text-slate-400 font-black uppercase tracking-[0.3em] shrink-0">
+          <span className="hidden sm:inline">Unidade Operacional: 9ª CIPM - ARARIPINA-PE</span>
           <span className="sm:hidden">9ª CIPM - PMPE</span>
-          <span className="text-right italic">POLÍCIA MILITAR DE PERNAMBUCO © 2024</span>
+          <span className="text-right opacity-50 flex items-center gap-2">
+             DESENVOLVIDO POR SEÇÃO DE INFORMÁTICA 
+             <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
+             2026
+          </span>
         </footer>
       </main>
     </div>

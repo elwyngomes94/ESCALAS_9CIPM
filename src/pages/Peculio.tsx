@@ -694,7 +694,7 @@ const Peculio = () => {
                   <div className="col-span-2">
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Situação</label>
                     <div className="flex flex-wrap gap-4">
-                      {['Ativo', 'Inativo', 'Licença', 'Agregado'].map((s) => (
+                      {['Ativo', 'Férias', 'Inativo', 'Licença', 'Agregado'].map((s) => (
                         <label key={s} className="flex items-center gap-2 cursor-pointer group">
                           <input
                             type="radio"

@@ -61,12 +61,14 @@ const CreateEscala = () => {
   const [ordinarySchedules, setOrdinarySchedules] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [success, setSuccess] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
 
   const mKey = format(currentMonth, 'yyyy-MM');
+  const prevMonthKey = format(subMonths(currentMonth, 1), 'yyyy-MM');
 
   const [serviceSearchTerm, setServiceSearchTerm] = useState('');
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
@@ -79,6 +81,99 @@ const CreateEscala = () => {
     policemanMat: string;
     date: Date;
   } | null>(null);
+
+  const handleDuplicateLastMonth = async () => {
+    if (!isAdmin || duplicating) return;
+    if (!window.confirm(`Deseja duplicar todas as CONFIGURAÇÕES DE SERVIÇO de ${format(subMonths(currentMonth, 1), 'MMMM', { locale: ptBR })} para este mês?`)) return;
+
+    setDuplicating(true);
+    try {
+      // 1. Get service types from prev month
+      const prevServicesSnap = await getDocs(query(collection(db, 'serviceTypes'), where('month', '==', prevMonthKey)));
+      
+      // 2. Add them to current month
+      for (const d of prevServicesSnap.docs) {
+        const data = d.data();
+        await addDoc(collection(db, 'serviceTypes'), {
+          ...data,
+          month: mKey,
+          createdAt: serverTimestamp(),
+          activeDates: [] // Reset active dates for the new month to avoid confusion
+        });
+      }
+
+      // 3. Duplicate Quota Settings
+      const prevQuotasSnap = await getDocs(query(collection(db, 'quotaSettings'), where('month', '==', prevMonthKey)));
+      if (!prevQuotasSnap.empty) {
+        const qData = prevQuotasSnap.docs[0].data();
+        await addDoc(collection(db, 'quotaSettings'), {
+          ...qData,
+          month: mKey,
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      alert('Configurações duplicadas com sucesso!');
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao duplicar: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
+  const suggestBestPM = (date: Date) => {
+    if (!selectedServiceId) return;
+    const service = services.find(s => s.id === selectedServiceId);
+    if (!service) return;
+
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const dayNum = getDate(date);
+
+    // Candidates are those who volunteered for this tab type
+    const candidates = filteredVolunteers.filter(v => {
+      const poly = v.policeman;
+      if (!poly) return false;
+
+      // Filter by availability (not ordinary)
+      const isOrd = (ordinarySchedules[v.policemanId] || []).includes(dayNum);
+      if (isOrd) return false;
+
+      // Check if already scaled in THIS service type today
+      const alreadyScaled = joinedEscalas.some(e => 
+        format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
+        e.policemenIds.includes(v.policemanId) &&
+        e.service?.tipo === service.tipo
+      );
+      if (alreadyScaled && service.tipo === 'PJES') return false;
+
+      // Check remaining quotas
+      const scaledCount = joinedEscalas.filter(e => 
+        e.policemenIds.includes(v.policemanId) && 
+        e.service?.tipo === service.tipo
+      ).length;
+      if (scaledCount >= (v.cotas || 0) && service.tipo === 'PJES') return false;
+
+      return true;
+    });
+
+    // Sort by Seniority (Antiguidade - lower is better in military logic: 1 is top)
+    candidates.sort((a, b) => {
+      const antA = a.policeman?.antiguidade || 9999;
+      const antB = b.policeman?.antiguidade || 9999;
+      return antA - antB;
+    });
+
+    if (candidates.length > 0) {
+      const best = candidates[0];
+      if (window.confirm(`Sugerimos: ${best.policeman?.graduacaoPosto} ${best.policeman?.nomeGuerra} (Mais Antigo Disponível). Deseja escalar?`)) {
+        handleAssignService(selectedServiceId, { policemanId: best.policemanId, date });
+      }
+    } else {
+      alert('Nenhum policial disponível seguindo as regras para esta data.');
+    }
+  };
 
   // Joins computed via useMemo to avoid stale data in closures and redundant state
   const joinedVolunteers = useMemo(() => {
@@ -484,9 +579,9 @@ const CreateEscala = () => {
            </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
            {/* Mini Stats in Header */}
-           <div className="hidden xl:flex items-center gap-6 px-6 py-3 bg-slate-50 rounded-2xl border border-slate-100">
+           <div className="hidden xl:flex items-center gap-6 px-6 py-2 bg-slate-50 rounded-2xl border border-slate-100">
               <div className="text-right">
                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Consumo PJES</p>
                  <p className="text-xs font-black text-pmpe-navy">{Math.round((totalPjesUsed / (totalPjesLimit || 1)) * 100)}%</p>
@@ -498,9 +593,20 @@ const CreateEscala = () => {
               </div>
            </div>
 
-           <button className="flex items-center gap-3 px-6 py-3 bg-pmpe-navy text-white rounded-2xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all shadow-xl shadow-pmpe-navy/10 border border-white/10 active:scale-95">
-              <Download className="w-4 h-4 text-pmpe-gold" /> Exportar Matriz
-           </button>
+           <div className="flex items-center gap-2">
+              <button 
+                onClick={handleDuplicateLastMonth}
+                disabled={duplicating}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all border border-slate-200"
+              >
+                 <Zap className={cn("w-3.5 h-3.5", duplicating && "animate-spin")} />
+                 {duplicating ? 'Duplicando...' : 'Duplicar Configurações'}
+              </button>
+              
+              <button className="flex items-center gap-3 px-6 py-3 bg-pmpe-navy text-white rounded-2xl text-[10px] font-black uppercase hover:bg-slate-800 transition-all shadow-xl shadow-pmpe-navy/10 border border-white/10 active:scale-95">
+                 <Download className="w-4 h-4 text-pmpe-gold" /> Exportar Matriz
+              </button>
+           </div>
         </div>
       </div>
 
@@ -590,13 +696,27 @@ const CreateEscala = () => {
                         <th 
                           key={day.toISOString()} 
                           className={cn(
-                            "min-w-[50px] p-2 border-b-2 border-black border-l-2 border-black text-center transition-colors",
+                            "min-w-[50px] p-2 border-b-2 border-black border-l-2 border-black text-center transition-colors group/header",
                             isWknd ? "bg-red-600" : "bg-blue-700 hover:bg-blue-800"
                           )}
                         >
-                           <div className="flex flex-col items-center">
+                           <div className="flex flex-col items-center relative">
                               <span className="text-[7px] font-bold opacity-80 mb-0.5 leading-none uppercase">{format(day, 'EEE', { locale: ptBR })}</span>
                               <span className="text-[14px] font-black leading-none">{format(day, 'dd')}</span>
+                              
+                              {/* Suggest Mode Indicator */}
+                              {selectedServiceId && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    suggestBestPM(day);
+                                  }}
+                                  title="Sugerir Melhor Policial para este dia"
+                                  className="absolute -bottom-1 left-1/2 -translate-x-1/2 translate-y-full opacity-0 group-hover/header:opacity-100 transition-all p-1 bg-white rounded-full shadow-lg border border-slate-200 z-50 text-pmpe-navy hover:scale-110 active:scale-95"
+                                >
+                                   <Zap className="w-2.5 h-2.5 fill-pmpe-gold text-pmpe-gold" />
+                                </button>
+                              )}
                            </div>
                         </th>
                       );
