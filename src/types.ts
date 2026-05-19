@@ -72,6 +72,7 @@ export interface Volunteer {
   cotas: number;
   month: string; // YYYY-MM
   desiredService?: string;
+  order?: number;
   createdAt?: any;
 }
 

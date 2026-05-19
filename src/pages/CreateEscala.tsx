@@ -25,6 +25,8 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  ArrowUp,
+  ArrowDown,
   Trash2,
   Download,
   ShieldCheck,
@@ -66,7 +68,7 @@ const CreateEscala = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
-  const [sortBy, setSortBy] = useState<'graduacaoPosto' | 'matricula' | 'nomeGuerra' | 'antiguidade'>('antiguidade');
+  const [sortBy, setSortBy] = useState<'graduacaoPosto' | 'matricula' | 'nomeGuerra' | 'antiguidade' | 'order'>('order');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const mKey = format(currentMonth, 'yyyy-MM');
@@ -510,6 +512,38 @@ const CreateEscala = () => {
     end: endOfMonth(currentMonth)
   });
 
+  const handleMoveVolunteer = async (volunteerId: string, direction: 'up' | 'down') => {
+    if (!isAdmin || submitting) return;
+
+    const currentIndex = filteredVolunteers.findIndex(v => v.id === volunteerId);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= filteredVolunteers.length) return;
+
+    const currentV = filteredVolunteers[currentIndex];
+    const targetV = filteredVolunteers[targetIndex];
+
+    if (!currentV.id || !targetV.id) return;
+
+    setSubmitting(true);
+    try {
+      // If order is not set, we assign current indices as initial order
+      const currentOrder = currentV.order ?? currentIndex;
+      const targetOrder = targetV.order ?? targetIndex;
+
+      // Swap orders
+      await Promise.all([
+        updateDoc(doc(db, 'volunteers', currentV.id), { order: targetOrder }),
+        updateDoc(doc(db, 'volunteers', targetV.id), { order: currentOrder })
+      ]);
+    } catch (err) {
+      console.error("Erro ao mover voluntário:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSort = (field: typeof sortBy) => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -547,6 +581,11 @@ const CreateEscala = () => {
       if (sortBy === 'antiguidade') {
         valA = polyA.antiguidade || 99999;
         valB = polyB.antiguidade || 99999;
+      }
+
+      if (sortBy === 'order') {
+        valA = a.order ?? 99999;
+        valB = b.order ?? 99999;
       }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
@@ -847,7 +886,16 @@ const CreateEscala = () => {
                                sortBy === 'antiguidade' ? "bg-pmpe-gold text-pmpe-navy border-pmpe-gold" : "bg-white/10 border-white/20 text-white/60"
                              )}
                            >
-                             ANTIGUIDADE
+                             SORT: ANTIGUIDADE
+                           </button>
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); handleSort('order'); }}
+                             className={cn(
+                               "px-2 py-0.5 rounded text-[8px] border transition-all",
+                               sortBy === 'order' ? "bg-pmpe-gold text-pmpe-navy border-pmpe-gold" : "bg-white/10 border-white/20 text-white/60"
+                             )}
+                           >
+                             PERSONALIZADO
                            </button>
                            {sortBy === 'nomeGuerra' && (
                              sortOrder === 'asc' ? <ChevronLeft className="w-2.5 h-2.5 rotate-90 text-pmpe-gold" /> : <ChevronLeft className="w-2.5 h-2.5 -rotate-90 text-pmpe-gold" />
@@ -920,7 +968,25 @@ const CreateEscala = () => {
                         <td className="sticky left-0 z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-black text-slate-500 border-r-2 border-b-2 border-black">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
                         <td className="sticky left-[60px] z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-500 border-r-2 border-b-2 border-black">{v.policeman?.matricula}</td>
                         <td className="sticky left-[150px] z-10 p-3 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-5 border-r-2 border-b-2 border-black truncate">
-                           {v.policeman?.nomeGuerra}
+                           <div className="flex items-center justify-between gap-2">
+                             <span className="truncate">{v.policeman?.nomeGuerra}</span>
+                             {sortBy === 'order' && !searchTerm && (
+                               <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                                 <button 
+                                   onClick={() => handleMoveVolunteer(v.id!, 'up')}
+                                   className="p-0.5 hover:bg-slate-200 rounded text-pmpe-navy"
+                                 >
+                                   <ArrowUp className="w-3 h-3" />
+                                 </button>
+                                 <button 
+                                   onClick={() => handleMoveVolunteer(v.id!, 'down')}
+                                   className="p-0.5 hover:bg-slate-200 rounded text-pmpe-navy"
+                                 >
+                                   <ArrowDown className="w-3 h-3" />
+                                 </button>
+                               </div>
+                             )}
+                           </div>
                         </td>
 
                         {/* Stats Dynamic Columns */}
