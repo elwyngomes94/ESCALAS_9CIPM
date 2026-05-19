@@ -610,13 +610,102 @@ const CreateEscala = () => {
         </div>
       </div>
 
+      {/* Horizontal Services Dictionary */}
+      <div className="bg-white border-b border-slate-200 px-8 py-3 shrink-0 shadow-sm z-20 overflow-hidden">
+        <div className="flex items-center gap-6">
+          <div className="shrink-0 flex items-center gap-4 pr-6 border-r border-slate-100">
+             <div className="flex flex-col">
+                <h3 className="text-[9px] font-black text-pmpe-navy uppercase tracking-[0.2em] flex items-center gap-2 mb-1">
+                   <Shield className="w-3.5 h-3.5 text-pmpe-gold" />
+                   Dicionário de Serviços ({activeTab})
+                </h3>
+                <div className="flex items-center gap-3">
+                   {selectedServiceId && (
+                      <button 
+                        onClick={() => setSelectedServiceId(null)}
+                        className="text-[7px] font-black text-rose-500 uppercase hover:bg-rose-50 px-2 py-0.5 rounded-md transition-colors border border-rose-100"
+                      >
+                         Limpar Pincel
+                      </button>
+                   )}
+                   <p className="text-[7px] font-bold text-slate-400 uppercase italic">
+                      {selectedServiceId ? "MODO PINCEL ATIVO" : "Selecione para pintar"}
+                   </p>
+                </div>
+             </div>
+          </div>
+
+          <div className="relative w-44 shrink-0">
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+             <input 
+                type="text"
+                placeholder="Filtrar..."
+                value={serviceSearchTerm}
+                onChange={(e) => setServiceSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[8px] font-bold outline-none focus:ring-2 focus:ring-pmpe-navy/10 uppercase"
+             />
+          </div>
+
+          <div className="flex-1 flex gap-3 overflow-x-auto pb-1 custom-matrix-scroll scrollbar-none">
+             {services
+               .filter(s => {
+                  const matchesTab = s.tipo?.toUpperCase() === activeTab;
+                  const matchesMonth = s.month === mKey;
+                  const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
+                  return matchesTab && matchesMonth && matchesSearch;
+               })
+               .map(s => (
+                <div 
+                   key={s.id} 
+                   onClick={() => setSelectedServiceId(selectedServiceId === s.id ? null : s.id!)}
+                   className={cn(
+                      "p-2 rounded-xl border transition-all group cursor-pointer select-none min-w-[140px] flex items-center gap-2",
+                      selectedServiceId === s.id 
+                        ? "bg-pmpe-navy border-pmpe-navy shadow-md ring-2 ring-pmpe-navy/10" 
+                        : "border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm"
+                   )}
+                >
+                   <div 
+                      draggable
+                      onDragStart={(e) => {
+                         e.dataTransfer.setData('serviceId', s.id!);
+                         setSelectedServiceId(s.id!);
+                      }}
+                      onDragEnd={() => setSelectedServiceId(null)}
+                      className={cn(
+                         "w-8 h-8 rounded-lg flex items-center justify-center font-black text-[9px] shadow-sm shrink-0",
+                         selectedServiceId === s.id ? "bg-white" : ""
+                      )} 
+                      style={selectedServiceId === s.id ? { color: s.color } : { backgroundColor: s.color, color: 'white' }}
+                   >
+                      {s.sigla}
+                   </div>
+                   <div className="flex-1 min-w-0">
+                      <p className={cn(
+                         "text-[9px] font-black uppercase leading-tight truncate",
+                         selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
+                      )}>{s.nome}</p>
+                      <p className={cn(
+                         "text-[7px] font-bold uppercase tracking-tighter mt-0.5",
+                         selectedServiceId === s.id ? "text-white/60" : "text-slate-400"
+                      )}>{s.horarioInicio} - {s.horarioTermino}</p>
+                   </div>
+                </div>
+             ))}
+             {services.filter(s => s.tipo?.toUpperCase() === activeTab && s.month === mKey).length === 0 && (
+                <p className="text-[8px] font-black text-slate-300 uppercase py-2">Sem serviços cadastrados</p>
+             )}
+          </div>
+        </div>
+      </div>
+
+
       {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden flex flex-row p-6 gap-6">
+      <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
         
-        {/* Left Column (Matrix + Search) */}
-        <div className="flex-1 flex flex-col gap-6 overflow-hidden">
-          {/* Statistics Panels Row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0">
+        {/* Statistics Panels Row */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0">
+
              <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-md flex items-center gap-4 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-pmpe-navy/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
                 <div className="p-3 bg-pmpe-navy rounded-2xl text-pmpe-gold relative z-10 shadow-lg shadow-pmpe-navy/20">
@@ -968,125 +1057,8 @@ const CreateEscala = () => {
           </div>
         </div>
 
-        {/* Right Sidebar: Services Dictionary */}
-        <div className="w-80 flex flex-col gap-6 shrink-0 h-full overflow-hidden">
-           {/* Services List Panel */}
-           <div className="flex-1 bg-white rounded-[32px] border border-slate-200 shadow-xl overflow-hidden flex flex-col">
-              <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[10px] font-black text-pmpe-navy uppercase tracking-[0.2em] flex items-center gap-2">
-                       <Shield className="w-4 h-4 text-pmpe-gold" />
-                       Dicionário de Serviços ({activeTab})
-                    </h3>
-                    {selectedServiceId && (
-                       <button 
-                         onClick={() => setSelectedServiceId(null)}
-                         className="text-[8px] font-black text-rose-500 uppercase hover:bg-rose-50 px-2 py-1 rounded-lg transition-colors border border-rose-100"
-                       >
-                          Limpar Seleção
-                       </button>
-                    )}
-                 </div>
-                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                    <input 
-                       type="text"
-                       placeholder="Filtrar Serviços..."
-                       value={serviceSearchTerm}
-                       onChange={(e) => setServiceSearchTerm(e.target.value)}
-                       className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[9px] font-bold outline-none focus:ring-2 focus:ring-pmpe-navy/10 uppercase"
-                    />
-                 </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-none">
-                 {services
-                   .filter(s => {
-                      const matchesTab = s.tipo?.toUpperCase() === activeTab;
-                      const matchesMonth = s.month === mKey;
-                      const matchesSearch = !serviceSearchTerm || s.sigla.toLowerCase().includes(serviceSearchTerm.toLowerCase()) || s.nome.toLowerCase().includes(serviceSearchTerm.toLowerCase());
-                      return matchesTab && matchesMonth && matchesSearch;
-                   })
-                   .map(s => (
-                    <div 
-                       key={s.id} 
-                       onClick={() => setSelectedServiceId(selectedServiceId === s.id ? null : s.id!)}
-                       onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedServiceId(null);
-                       }}
-                       className={cn(
-                          "p-3 rounded-2xl border transition-all group cursor-pointer select-none",
-                          selectedServiceId === s.id 
-                            ? "bg-pmpe-navy border-pmpe-navy shadow-lg ring-2 ring-pmpe-navy/10 -translate-y-1" 
-                            : "border-slate-50 bg-slate-50/30 hover:bg-white hover:border-slate-200 hover:shadow-md"
-                       )}
-                    >
-                       <div className="flex items-center gap-3">
-                          <div 
-                             draggable
-                             onDragStart={(e) => {
-                                e.dataTransfer.setData('serviceId', s.id!);
-                                setSelectedServiceId(s.id!);
-                             }}
-                             onDragEnd={() => setSelectedServiceId(null)}
-                             className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] shadow-sm transform transition-transform cursor-grab active:cursor-grabbing",
-                                selectedServiceId === s.id ? "scale-110 bg-white" : "group-hover:scale-110"
-                             )} 
-                             style={selectedServiceId === s.id ? { color: s.color } : { backgroundColor: s.color, color: 'white' }}
-                          >
-                             {s.sigla}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                             <div className="flex items-center justify-between gap-2 overflow-hidden">
-                                <p className={cn(
-                                   "text-[10px] font-black uppercase leading-tight truncate",
-                                   selectedServiceId === s.id ? "text-white" : "text-pmpe-navy"
-                                )}>{s.nome}</p>
-                             </div>
-                             <div className="flex items-center gap-2 mt-1">
-                                <span className={cn(
-                                   "text-[7px] font-bold uppercase tracking-tighter",
-                                   selectedServiceId === s.id ? "text-white/60" : "text-slate-400"
-                                )}>COTA: {s.cotasPorServico || 1}</span>
-                                <div className={cn("w-1 h-1 rounded-full", selectedServiceId === s.id ? "bg-white/20" : "bg-slate-200")} />
-                                <span className={cn(
-                                   "text-[7px] font-bold uppercase tracking-tighter",
-                                   selectedServiceId === s.id ? "text-white/60" : "text-slate-400"
-                                )}>{s.horarioInicio} - {s.horarioTermino}</span>
-                             </div>
-                          </div>
-                       </div>
-                    </div>
-                 ))}
-                 {services.filter(s => s.tipo?.toUpperCase() === activeTab && s.month === mKey).length === 0 && (
-                    <div className="p-8 text-center">
-                       <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                          <AlertCircle className="w-6 h-6 text-slate-300" />
-                       </div>
-                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">
-                          Nenhum serviço de {activeTab} cadastrado para o mês de {format(currentMonth, 'MMMM', { locale: ptBR })}.
-                       </p>
-                    </div>
-                 )}
-              </div>
-              <div className="p-4 bg-slate-50 border-t border-slate-100">
-                 <div className="flex items-center gap-4 px-3 py-2 bg-pmpe-navy/5 rounded-xl">
-                    <Zap className={cn("w-3 h-3 text-pmpe-gold", selectedServiceId && "animate-pulse")} />
-                    <div className="flex-1">
-                       <p className="text-[7px] font-bold text-pmpe-navy uppercase leading-tight italic">
-                          {selectedServiceId 
-                            ? "MODO PINCEL ATIVO: Clique no '0' para pintar a escala."
-                            : "Clique no '0' na matriz para lançar estes serviços."}
-                       </p>
-                    </div>
-                 </div>
-              </div>
-           </div>
-        </div>
-      </div>
+        {/* Advanced Selection Modal */}
 
-      {/* Advanced Selection Modal */}
       <AnimatePresence>
         {assignmentModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
