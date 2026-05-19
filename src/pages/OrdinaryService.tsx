@@ -26,7 +26,9 @@ import {
   Download,
   Phone,
   MessageSquare,
-  FileText
+  FileText,
+  ShieldAlert,
+  Shield
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths, isSameDay, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -392,57 +394,58 @@ const OrdinaryService = () => {
               className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               {/* Modal Header */}
-              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-pmpe-navy text-white">
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-pmpe-navy text-white" style={{ backgroundColor: '#002147' }}>
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-pmpe-gold shadow-inner">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-inner" style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)', borderWidth: '1px', borderStyle: 'solid', color: '#FFD700' }}>
                     {selectedPolicemanCalendar.graduacaoPosto.substring(0, 2)}
                   </div>
                   <div>
                     <h3 className="text-xl font-black uppercase tracking-tighter">
                       {selectedPolicemanCalendar.graduacaoPosto} {selectedPolicemanCalendar.nomeGuerra}
                     </h3>
-                    <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
                       RELATÓRIO INDIVIDUAL DE SERVIÇO – {monthName}
                     </p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setSelectedPolicemanCalendar(null)}
-                  className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/10"
+                  className="p-3 rounded-2xl transition-all"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)', borderWidth: '1px', borderStyle: 'solid' }}
                 >
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
               {/* Modal Content */}
-              <div className="flex-1 overflow-y-auto p-8 custom-matrix-scroll">
-                <div id="personal-report-content" className="bg-white p-6 border-2 border-slate-100 rounded-3xl">
-                   <div className="flex items-center justify-between mb-8 border-b-2 border-pmpe-navy/10 pb-6">
+              <div className="flex-1 overflow-y-auto p-8 custom-matrix-scroll" style={{ backgroundColor: '#f8fafc' }}>
+                <div id="personal-report-content" className="p-6 border-2 rounded-3xl" style={{ backgroundColor: '#ffffff', borderColor: '#f1f5f9', borderStyle: 'solid' }}>
+                   <div className="flex items-center justify-between mb-8 border-b-2 pb-6" style={{ borderColor: 'rgba(0,33,71,0.1)', borderBottomStyle: 'solid' }}>
                       <div className="flex items-center gap-3">
                          <div className="w-12 h-12">
                             <img src="/logo_9cipm.png" alt="9ª CIPM" className="w-full h-full object-contain" />
                          </div>
                          <div>
-                            <p className="text-[11px] font-black text-pmpe-navy uppercase tracking-widest leading-none">9ª CIPM - ARARIPINA</p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Polícia Militar de Pernambuco</p>
+                            <p className="text-[11px] font-black uppercase tracking-widest leading-none" style={{ color: '#002147' }}>9ª CIPM - ARARIPINA</p>
+                            <p className="text-[9px] font-bold uppercase mt-1" style={{ color: '#94a3b8' }}>Polícia Militar de Pernambuco</p>
                          </div>
                       </div>
                       <div className="text-right">
-                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Matrícula</p>
-                         <p className="text-sm font-black text-pmpe-navy">{selectedPolicemanCalendar.matricula}</p>
+                         <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#94a3b8' }}>Matrícula</p>
+                         <p className="text-sm font-black" style={{ color: '#002147' }}>{selectedPolicemanCalendar.matricula}</p>
                       </div>
                    </div>
 
                    {/* Calendar Visualizer */}
                    <div className="grid grid-cols-7 gap-1.5 mb-8">
                       {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
-                         <div key={d} className="text-center py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 rounded-lg">
+                         <div key={d} className="text-center py-2 text-[10px] font-black uppercase tracking-widest rounded-lg" style={{ backgroundColor: '#f8fafc', color: '#94a3b8' }}>
                             {d}
                          </div>
                       ))}
                       {/* Offset for first day of month */}
                       {Array.from({ length: startOfMonth(currentDate).getDay() }).map((_, i) => (
-                         <div key={`offset-${i}`} className="h-14 bg-slate-50/30 rounded-xl" />
+                         <div key={`offset-${i}`} className="h-14 rounded-xl" style={{ backgroundColor: '#f8fafc' }} />
                       ))}
                       {daysInMonth.map(day => {
                          const d = getDate(day);
@@ -453,32 +456,29 @@ const OrdinaryService = () => {
                          const wknd = isWeekend(day);
 
                          return (
-                            <div key={d} className={cn(
-                               "h-20 rounded-xl border p-2 flex flex-col justify-between transition-all",
-                               isOrd ? "bg-pmpe-red/5 border-pmpe-red/20" : 
-                               scaled.length > 0 ? "bg-emerald-50 border-emerald-100" :
-                               wknd ? "bg-slate-50 border-slate-100" : "bg-white border-slate-50"
-                            )}>
+                            <div key={d} className="h-20 rounded-xl border p-2 flex flex-col justify-between transition-all" style={{ 
+                              backgroundColor: isOrd ? '#fdf2f2' : (scaled.length > 0 ? '#ecfdf5' : (wknd ? '#f8fafc' : '#ffffff')),
+                              borderColor: isOrd ? '#fee2e2' : (scaled.length > 0 ? '#d1fae5' : '#f1f5f9'),
+                              borderStyle: 'solid',
+                              borderWidth: '1px'
+                            }}>
                                <div className="flex items-center justify-between">
-                                  <span className={cn(
-                                     "text-[10px] font-black",
-                                     isOrd ? "text-pmpe-red" : "text-slate-400"
-                                  )}>{d}</span>
-                                  {isOrd && <ShieldAlert className="w-2.5 h-2.5 text-pmpe-red" />}
+                                  <span className="text-[10px] font-black" style={{ color: isOrd ? '#ef4444' : '#94a3b8' }}>{d}</span>
+                                  {isOrd && <ShieldAlert className="w-2.5 h-2.5" style={{ color: '#ef4444' }} />}
                                </div>
                                <div className="space-y-1">
                                   {pjesScales.map(e => (
-                                     <div key={e.id} className="text-[7px] font-black bg-emerald-500 text-white rounded px-1 py-0.5 truncate uppercase">
+                                     <div key={e.id} className="text-[7px] font-black text-white rounded px-1 py-0.5 truncate uppercase" style={{ backgroundColor: '#10b981' }}>
                                         PJES: {serviceTypes[e.serviceTypeId]?.sigla}
                                      </div>
                                   ))}
                                   {opsScales.map(e => (
-                                     <div key={e.id} className="text-[7px] font-black bg-blue-500 text-white rounded px-1 py-0.5 truncate uppercase">
+                                     <div key={e.id} className="text-[7px] font-black text-white rounded px-1 py-0.5 truncate uppercase" style={{ backgroundColor: '#3b82f6' }}>
                                         OPS: {serviceTypes[e.serviceTypeId]?.sigla}
                                      </div>
                                   ))}
                                   {isOrd && (
-                                     <div className="text-[7px] font-black bg-pmpe-red text-white rounded px-1 py-0.5 truncate uppercase">
+                                     <div className="text-[7px] font-black text-white rounded px-1 py-0.5 truncate uppercase" style={{ backgroundColor: '#ef4444' }}>
                                         ORDINÁRIO
                                      </div>
                                   )}
@@ -490,25 +490,25 @@ const OrdinaryService = () => {
 
                    {/* List View for Report */}
                    <div className="space-y-3">
-                      <h4 className="text-[10px] font-black text-pmpe-navy uppercase tracking-widest flex items-center gap-2 mb-4">
-                         <div className="w-1.5 h-1.5 rounded-full bg-pmpe-gold" />
+                      <h4 className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2 mb-4" style={{ color: '#002147' }}>
+                         <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#FFD700' }} />
                          Resumo de Empenhamento
                       </h4>
                       <table className="w-full text-left">
                          <thead>
-                            <tr className="border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                            <tr className="border-b text-[9px] font-black uppercase tracking-widest" style={{ borderBottomColor: '#f1f5f9', borderBottomStyle: 'solid', borderBottomWidth: '1px', color: '#94a3b8' }}>
                                <th className="py-2">Data</th>
                                <th className="py-2">Serviço/Unidade</th>
                                <th className="py-2">Tipo</th>
                                <th className="py-2">Horário</th>
                             </tr>
                          </thead>
-                         <tbody className="text-[10px] uppercase font-bold text-slate-700">
+                         <tbody className="text-[10px] uppercase font-bold" style={{ color: '#334155' }}>
                             {(schedules[selectedPolicemanCalendar.id!] || []).map(dayNum => (
-                               <tr key={`ord-${dayNum}`} className="border-b border-slate-50">
+                               <tr key={`ord-${dayNum}`} className="border-b" style={{ borderBottomColor: '#f8fafc', borderBottomStyle: 'solid', borderBottomWidth: '1px' }}>
                                   <td className="py-2">{dayNum} / {format(currentDate, 'MM/yy')}</td>
                                   <td className="py-2">SERVICIO ORDINÁRIO 9ª CIPM</td>
-                                  <td className="py-2"><span className="text-pmpe-red">ORDINÁRIO</span></td>
+                                  <td className="py-2"><span style={{ color: '#ef4444' }}>ORDINÁRIO</span></td>
                                   <td className="py-2">-</td>
                                </tr>
                             ))}
@@ -517,11 +517,11 @@ const OrdinaryService = () => {
                               .map(e => {
                                  const sType = serviceTypes[e.serviceTypeId];
                                  return (
-                                    <tr key={e.id} className="border-b border-slate-50">
+                                    <tr key={e.id} className="border-b" style={{ borderBottomColor: '#f8fafc', borderBottomStyle: 'solid', borderBottomWidth: '1px' }}>
                                        <td className="py-2">{format(e.date.toDate(), 'dd/MM/yy')}</td>
                                        <td className="py-2">{sType?.nome} ({sType?.cidade})</td>
                                        <td className="py-2">
-                                          <span className={sType?.tipo === 'PJES' ? "text-emerald-600" : "text-blue-600"}>
+                                          <span style={{ color: sType?.tipo === 'PJES' ? '#059669' : '#2563eb' }}>
                                              {sType?.tipo}
                                           </span>
                                        </td>
@@ -533,11 +533,11 @@ const OrdinaryService = () => {
                       </table>
                    </div>
                    
-                   <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between">
-                      <div className="text-[8px] font-bold text-slate-400 uppercase italic">
+                   <div className="mt-8 pt-6 border-t flex items-center justify-between" style={{ borderTopColor: '#f1f5f9', borderTopStyle: 'solid', borderTopWidth: '1px' }}>
+                      <div className="text-[8px] font-bold uppercase italic" style={{ color: '#94a3b8' }}>
                          Gerado via Sistema Integrado de Escalas - 9ª CIPM
                       </div>
-                      <div className="text-[8px] font-black text-pmpe-navy uppercase">
+                      <div className="text-[8px] font-black uppercase" style={{ color: '#002147' }}>
                          {new Date().toLocaleString('pt-BR')}
                       </div>
                    </div>
