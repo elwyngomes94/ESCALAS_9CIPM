@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 async function startServer() {
   const app = express();
@@ -9,14 +9,7 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
-    }
-  });
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
   // AI Scheduling Endpoint
   app.post("/api/ai/schedule", async (req, res) => {
@@ -30,91 +23,89 @@ async function startServer() {
         currentMonth 
       } = req.body;
 
+      console.log(`[AI] Processing schedule for ${currentMonth}. Volunteers: ${volunteers?.length}, Services: ${services?.length}`);
+
       if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ error: "Gemini API Key não configurada" });
+        console.error("[AI] GEMINI_API_KEY is missing");
+        return res.status(500).json({ error: "Chave da API Gemini não configurada no ambiente." });
       }
 
       const systemInstruction = `
-        Você é um Assistente especializado em Gestão de Escalas Militares (9ª CIPM).
-        Sua missão é sugerir uma escala EXTRA (PJES/OPS) otimizada para as vagas ociosas do mês ${currentMonth}.
+        Você é um Assistente de Gestão de Escalas Militares (9ª CIPM).
+        Sua missão: Sugerir escalas EXTRA (PJES/OPS) para as vagas ociosas do mês ${currentMonth}.
         
-        REGRAS DE OURO (NÃO PODEM SER VIOLADAS):
-        1. IDs VÁLIDOS: Use APENAS "policemanId" e "serviceId" que foram fornecidos nos dados. Nunca invente ou use IDs de outros meses.
-        2. SERVIÇO ORDINÁRIO: Proibido escalar em dia de serviço ordinário (ordinário prevalece sobre extra).
-        3. CONFLITOS BI-HORÁRIOS: Proibido escalas cuja duração (inicio -> fim) se sobreponha. 
-           Obs: Turnos que viram o dia (ex: 18h às 02h) ocupam o horário do dia seguinte também.
-        4. LIMITE PJES POR DIA: O policial só pode fazer NO MÁXIMO 1 (um) PJES por dia.
-        5. COTAS DO POLICIAL (PJES): Não exceda o campo "cotas" do voluntário.
-        6. COTAS DA UNIDADE (PJES): O somatório de cotas de todos os serviços de um subtipo (MP, FORUM, ESCOLAR, DECRETO) não pode exceder o limite em quotaSettings.
-        7. VAGAS: Respeite rigorosamente "vagasNecessarias" por dia. Ignore dias em que o serviço não está ativo (activationType).
-        8. ANTIGUIDADE: Priorize preencher vagas com os policiais mais antigos (menor valor numérico no campo "antiguidade").
+        REGRAS ABSOLUTAS:
+        1. Use somente IDs de policiais e serviços fornecidos em 'volunteers' e 'services'.
+        2. Proibido escala em dia de Serviço Ordinário do policial (verifique 'ordinarySchedules').
+        3. Proibido sobreposição de horários (atente para turnos que viram o dia).
+        4. Limite de 1 PJES por dia por policial.
+        5. Respeite as cotas individuais do voluntário (campo 'cotas').
+        6. Respeite as vagas diárias do serviço ('vagasNecessarias').
+        7. Prioridade: Policiais mais antigos (menor valor no campo 'antiguidade').
         
-        Sua saída deve ser APENAS o JSON no formato:
-        {
-          "assignments": [
-            { "policemanId": "ID_DO_POLICIAL", "serviceId": "ID_DO_SERVICO", "date": "YYYY-MM-DD" }
-          ],
-          "explanation": "Breve explicação sobre a otimização realizada."
-        }
+        SAÍDA: JSON puro no formato especificado.
       `;
 
       const prompt = `
         DADOS PARA PROCESSAMENTO:
-        - Mês: ${currentMonth}
+        - Escala Ordinária (ID -> dias ocupados): ${JSON.stringify(ordinarySchedules)}
         - Voluntários: ${JSON.stringify(volunteers)}
-        - Serviços Disponíveis: ${JSON.stringify(services)}
-        - Escalas já existentes (JÁ PREENCHIDAS): ${JSON.stringify(existingEscalas)}
-        - Escala Ordinária (policemanId -> lista de dias do mês em que está de serviço): ${JSON.stringify(ordinarySchedules)}
-        - Limites de Cotas da Unidade: ${JSON.stringify(quotaSettings)}
-        
-        Analise as escalas existentes e preencha as vagas OCIOSAS (vacancies) respeitando todas as regras.
+        - Serviços Ociosos: ${JSON.stringify(services)}
+        - Escalas já Preenchidas: ${JSON.stringify(existingEscalas)}
+        - Cotas da Unidade: ${JSON.stringify(quotaSettings)}
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        config: {
-          systemInstruction,
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash", 
+        systemInstruction 
+      });
+
+      const response = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
               assignments: {
-                type: Type.ARRAY,
+                type: SchemaType.ARRAY,
                 items: {
-                  type: Type.OBJECT,
+                  type: SchemaType.OBJECT,
                   properties: {
-                    policemanId: { type: Type.STRING },
-                    serviceId: { type: Type.STRING },
-                    date: { type: Type.STRING, description: "Format: YYYY-MM-DD" }
+                    policemanId: { type: SchemaType.STRING },
+                    serviceId: { type: SchemaType.STRING },
+                    date: { type: SchemaType.STRING }
                   },
                   required: ["policemanId", "serviceId", "date"]
                 }
               },
-              explanation: { type: Type.STRING }
+              explanation: { type: SchemaType.STRING }
             },
             required: ["assignments"]
           }
-        },
-        contents: prompt
+        }
       });
 
-      let text = response.text || '{}';
+      const result = await response.response;
+      let text = result.text() || '{}';
+      
       // Clean potential markdown blocks
       text = text.replace(/```json/g, "").replace(/```/g, "").trim();
       
-      console.log("AI Response received (length):", text.length);
+      console.log("[AI] Response received. Parsing...");
       
       try {
         const parsed = JSON.parse(text);
         if (!parsed.assignments) parsed.assignments = [];
         res.json(parsed);
       } catch (parseError) {
-        console.error("Failed to parse AI JSON. Content preview:", text.substring(0, 200));
-        res.status(500).json({ error: "O modelo retornou um formato inválido. Tente novamente." });
+        console.error("[AI] JSON Parse Error. Content:", text.substring(0, 500));
+        res.status(500).json({ error: "A IA retornou um formato de dados inválido. Tente novamente." });
       }
-    } catch (error) {
-      console.error("AI Scheduling Error:", error);
-      res.status(500).json({ error: "Erro ao gerar escala com IA: " + (error instanceof Error ? error.message : "Desconhecido") });
+    } catch (error: any) {
+      console.error("[AI] General Error:", error);
+      const errorMessage = error?.message || "Erro desconhecido na API do Gemini";
+      res.status(500).json({ error: `IA Indisponível: ${errorMessage}` });
     }
   });
 

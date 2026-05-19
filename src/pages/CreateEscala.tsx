@@ -697,7 +697,11 @@ const CreateEscala = () => {
             serviceTypeId: e.serviceTypeId,
             date: format(e.date.toDate(), 'yyyy-MM-dd')
           })),
-          ordinarySchedules,
+          ordinarySchedules: Object.fromEntries(
+            Object.entries(ordinarySchedules).filter(([id]) => 
+              joinedVolunteers.some(v => v.policemanId === id)
+            )
+          ),
           quotaSettings: unitQuotas,
           currentMonth: mKey
         })
