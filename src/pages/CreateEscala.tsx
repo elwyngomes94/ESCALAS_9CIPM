@@ -55,7 +55,8 @@ import {
   Zap,
   Shield,
   FileSpreadsheet,
-  GripVertical
+  GripVertical,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -81,6 +82,7 @@ const CreateEscala = () => {
   const [ordinarySchedules, setOrdinarySchedules] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [success, setSuccess] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -581,6 +583,77 @@ const CreateEscala = () => {
     }
   };
 
+  const handleRemoteAISchedule = async () => {
+    if (!isAdmin || aiLoading) return;
+    if (!window.confirm("Deseja utilizar a Inteligência Artificial para sugerir escalas para as vagas ociosas? As regras de antiguidade, cotas e conflitos serão respeitadas.")) return;
+
+    setAiLoading(true);
+    try {
+      const response = await fetch('/api/ai/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          volunteers: joinedVolunteers.map(v => ({
+            policemanId: v.policemanId,
+            nomeGuerra: v.policeman?.nomeGuerra,
+            antiguidade: v.policeman?.antiguidade,
+            cotas: v.cotas,
+            type: v.type
+          })),
+          services: services.filter(s => s.month === mKey).map(s => ({
+            id: s.id,
+            sigla: s.sigla,
+            nome: s.nome,
+            tipo: s.tipo,
+            pjesSubtype: s.pjesSubtype,
+            cotasPorServico: s.cotasPorServico,
+            vagasNecessarias: s.vagasNecessarias,
+            horarioInicio: s.horarioInicio,
+            horarioTermino: s.horarioTermino,
+            activeDates: s.activeDates,
+            activationType: s.activationType
+          })),
+          existingEscalas: allEscalasOfMonth.map(e => ({
+            policemenIds: e.policemenIds,
+            serviceTypeId: e.serviceTypeId,
+            date: format(e.date.toDate(), 'yyyy-MM-dd')
+          })),
+          ordinarySchedules,
+          quotaSettings: unitQuotas,
+          currentMonth: mKey
+        })
+      });
+
+      if (!response.ok) throw new Error('Falha na resposta da IA');
+      const data = await response.json();
+
+      if (data.assignments && data.assignments.length > 0) {
+        let count = 0;
+        // Process assignments sequentially or in small batches to respect handleAssignService logic
+        for (const assignment of data.assignments) {
+          try {
+            // Re-validate and assign using the existing robust logic
+            await handleAssignService(assignment.serviceId, {
+              policemanId: assignment.policemanId,
+              date: new Date(assignment.date + 'T12:00:00') // Avoid timezone shifts
+            });
+            count++;
+          } catch (e) {
+            console.error("AI Assignment item failed logic check:", e);
+          }
+        }
+        alert(`${count} escalas sugeridas pela IA foram processadas com sucesso.`);
+      } else {
+        alert("A IA não encontrou novas sugestões de escala que respeitem as regras atuais.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao processar escala via IA: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const days = eachDayOfInterval({
     start: startOfMonth(currentMonth),
     end: endOfMonth(currentMonth)
@@ -755,6 +828,20 @@ const CreateEscala = () => {
            </div>
 
            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleRemoteAISchedule}
+                disabled={aiLoading}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
+                  aiLoading 
+                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
+                    : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
+                )}
+              >
+                 <Sparkles className={cn("w-3.5 h-3.5", aiLoading && "animate-pulse")} />
+                 {aiLoading ? 'IA Processando...' : 'Escalar com IA'}
+              </button>
+
               <button 
                 onClick={handleDuplicateLastMonth}
                 disabled={duplicating}
