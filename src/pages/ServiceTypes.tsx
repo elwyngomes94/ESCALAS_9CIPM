@@ -499,18 +499,6 @@ const ServiceTypes = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Quantidade de Cotas {formData.tipo}</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      required
-                      value={formData.cotasPorServico}
-                      onChange={(e) => setFormData({...formData, cotasPorServico: parseFloat(e.target.value)})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pmpe-navy/5 focus:border-pmpe-navy transition-all"
-                    />
-                  </div>
-                  <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Ativação</label>
                     <select
                       required
