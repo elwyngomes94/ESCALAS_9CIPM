@@ -66,6 +66,8 @@ const CreateEscala = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
+  const [sortBy, setSortBy] = useState<'graduacaoPosto' | 'matricula' | 'nomeGuerra' | 'antiguidade'>('antiguidade');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const mKey = format(currentMonth, 'yyyy-MM');
   const prevMonthKey = format(subMonths(currentMonth, 1), 'yyyy-MM');
@@ -508,9 +510,18 @@ const CreateEscala = () => {
     end: endOfMonth(currentMonth)
   });
 
+  const handleSort = (field: typeof sortBy) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
   const filteredVolunteers = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
-    return joinedVolunteers
+    const result = joinedVolunteers
       .filter(v => v.type?.toUpperCase() === activeTab)
       .filter(v => {
         const poly = v.policeman;
@@ -518,7 +529,31 @@ const CreateEscala = () => {
           poly?.nomeGuerra.toLowerCase().includes(search) || 
           poly?.matricula.includes(search);
       });
-  }, [joinedVolunteers, activeTab, searchTerm]);
+
+    // Apply Sorting
+    return result.sort((a, b) => {
+      const polyA = a.policeman;
+      const polyB = b.policeman;
+      
+      if (!polyA || !polyB) return 0;
+
+      let valA: any = polyA[sortBy];
+      let valB: any = polyB[sortBy];
+
+      // Special handling for Graduação/Posto to use military hierarchy if needed, 
+      // but for now simple string sort or antiguidade is better.
+      // If sorting by antiguidade, it's numeric.
+      
+      if (sortBy === 'antiguidade') {
+        valA = polyA.antiguidade || 99999;
+        valB = polyB.antiguidade || 99999;
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [joinedVolunteers, activeTab, searchTerm, sortBy, sortOrder]);
 
   const totalPjesLimit = (unitQuotas?.pjesMPTotal || 0) + (unitQuotas?.pjesForumTotal || 0) + (unitQuotas?.pjesEscolarTotal || 0) + (unitQuotas?.pjesDecretoTotal || 0);
   const totalPjesUsed = currentUsage.PJES_MP + currentUsage.PJES_FORUM + currentUsage.PJES_ESCOLAR + currentUsage.PJES_DECRETO;
@@ -776,9 +811,50 @@ const CreateEscala = () => {
                 <thead className="sticky top-0 z-[20]">
                   <tr className="bg-pmpe-navy text-white h-16">
                     {/* Fixed Columns Headers */}
-                    <th className="sticky left-0 z-30 p-3 min-w-[60px] bg-pmpe-navy text-center font-black uppercase text-[10px] border-b-2 border-black">GRA.</th>
-                    <th className="sticky left-[60px] z-30 p-3 min-w-[90px] bg-pmpe-navy text-center font-black uppercase text-[10px] border-b-2 border-black border-l-2 border-black">MAT.</th>
-                    <th className="sticky left-[150px] z-30 p-4 min-w-[200px] bg-pmpe-navy text-left font-black uppercase text-[10px] border-b-2 border-black border-l-2 border-black uppercase tracking-wider">EFETIVO</th>
+                    <th 
+                      onClick={() => handleSort('graduacaoPosto')}
+                      className="sticky left-0 z-30 p-3 min-w-[60px] bg-pmpe-navy text-center font-black uppercase text-[10px] border-b-2 border-black cursor-pointer hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        GRA.
+                        {sortBy === 'graduacaoPosto' && (
+                          sortOrder === 'asc' ? <ChevronLeft className="w-2.5 h-2.5 rotate-90 text-pmpe-gold" /> : <ChevronLeft className="w-2.5 h-2.5 -rotate-90 text-pmpe-gold" />
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('matricula')}
+                      className="sticky left-[60px] z-30 p-3 min-w-[90px] bg-pmpe-navy text-center font-black uppercase text-[10px] border-b-2 border-black border-l-2 border-black cursor-pointer hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        MAT.
+                        {sortBy === 'matricula' && (
+                          sortOrder === 'asc' ? <ChevronLeft className="w-2.5 h-2.5 rotate-90 text-pmpe-gold" /> : <ChevronLeft className="w-2.5 h-2.5 -rotate-90 text-pmpe-gold" />
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => handleSort('nomeGuerra')}
+                      className="sticky left-[150px] z-30 p-4 min-w-[200px] bg-pmpe-navy text-left font-black uppercase text-[10px] border-b-2 border-black border-l-2 border-black uppercase tracking-wider cursor-pointer hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        EFETIVO
+                        <div className="flex items-center gap-2">
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); handleSort('antiguidade'); }}
+                             className={cn(
+                               "px-2 py-0.5 rounded text-[8px] border transition-all",
+                               sortBy === 'antiguidade' ? "bg-pmpe-gold text-pmpe-navy border-pmpe-gold" : "bg-white/10 border-white/20 text-white/60"
+                             )}
+                           >
+                             ANTIGUIDADE
+                           </button>
+                           {sortBy === 'nomeGuerra' && (
+                             sortOrder === 'asc' ? <ChevronLeft className="w-2.5 h-2.5 rotate-90 text-pmpe-gold" /> : <ChevronLeft className="w-2.5 h-2.5 -rotate-90 text-pmpe-gold" />
+                           )}
+                        </div>
+                      </div>
+                    </th>
                     
                     {/* Stats Columns Headers */}
                     <th className="p-3 min-w-[60px] bg-pmpe-gold text-pmpe-navy font-black text-[9px] uppercase border-b-2 border-black text-center tracking-tighter">SOLIC.</th>
