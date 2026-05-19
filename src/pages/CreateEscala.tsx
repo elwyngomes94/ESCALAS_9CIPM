@@ -17,6 +17,23 @@ import { Policeman, ServiceType, Volunteer, Escala, QuotaSettings, QuotaLog, Ord
 import { OperationType, handleFirestoreError, cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { 
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { 
   X, 
   Search, 
   Users,
@@ -37,7 +54,8 @@ import {
   Check,
   Zap,
   Shield,
-  FileSpreadsheet
+  FileSpreadsheet,
+  GripVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -507,6 +525,59 @@ const CreateEscala = () => {
     }
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const oldIndex = filteredVolunteers.findIndex(v => v.id === active.id);
+      const newIndex = filteredVolunteers.findIndex(v => v.id === over.id);
+      
+      const newOrder = arrayMove(filteredVolunteers, oldIndex, newIndex);
+      
+      // Update locally first for smooth UI
+      setVolunteers(prev => {
+        const updated = [...prev];
+        newOrder.forEach((v, index) => {
+          const found = updated.find(uv => uv.id === v.id);
+          if (found) {
+            found.order = index;
+          }
+        });
+        return updated;
+      });
+
+      // Persist to Firestore
+      setSubmitting(true);
+      try {
+        const writeBatch = (await import('firebase/firestore')).writeBatch;
+        const batch = writeBatch(db);
+        
+        newOrder.forEach((v, index) => {
+          if (v.id) {
+            batch.update(doc(db, 'volunteers', v.id), { order: index });
+          }
+        });
+        
+        await batch.commit();
+      } catch (err) {
+        console.error("Erro ao reordenar:", err);
+      } finally {
+        setSubmitting(false);
+      }
+    }
+  };
+
   const days = eachDayOfInterval({
     start: startOfMonth(currentMonth),
     end: endOfMonth(currentMonth)
@@ -609,6 +680,11 @@ const CreateEscala = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] overflow-hidden font-sans bg-slate-50">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
       
       {/* Header Operational Toolbar */}
       <div className="bg-white border-b border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shrink-0 shadow-sm z-30">
@@ -955,237 +1031,36 @@ const CreateEscala = () => {
                           </div>
                        </td>
                      </tr>
-                  ) : filteredVolunteers.map(v => {
-                    const scaledPMRecords = joinedEscalas.filter(e => e.policemenIds.includes(v.policemanId));
-                    const currentTabScales = scaledPMRecords.filter(e => e.service?.tipo?.toUpperCase() === activeTab);
-                    const scaledCount = currentTabScales.length;
-                    const solicted = v.cotas || 0;
-                    const remaining = solicted - scaledCount;
-
-                    return (
-                      <tr key={v.id} className="h-12 hover:bg-slate-50 transition-colors group">
-                        {/* Fixed ID Info */}
-                        <td className="sticky left-0 z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-black text-slate-500 border-r-2 border-b-2 border-black">{v.policeman?.graduacaoPosto.substring(0, 3)}</td>
-                        <td className="sticky left-[60px] z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-500 border-r-2 border-b-2 border-black">{v.policeman?.matricula}</td>
-                        <td className="sticky left-[150px] z-10 p-3 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-5 border-r-2 border-b-2 border-black truncate">
-                           <div className="flex items-center justify-between gap-2">
-                             <span className="truncate">{v.policeman?.nomeGuerra}</span>
-                             {sortBy === 'order' && !searchTerm && (
-                               <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <button 
-                                   onClick={() => handleMoveVolunteer(v.id!, 'up')}
-                                   className="p-0.5 hover:bg-slate-200 rounded text-pmpe-navy"
-                                 >
-                                   <ArrowUp className="w-3 h-3" />
-                                 </button>
-                                 <button 
-                                   onClick={() => handleMoveVolunteer(v.id!, 'down')}
-                                   className="p-0.5 hover:bg-slate-200 rounded text-pmpe-navy"
-                                 >
-                                   <ArrowDown className="w-3 h-3" />
-                                 </button>
-                               </div>
-                             )}
-                           </div>
-                        </td>
-
-                        {/* Stats Dynamic Columns */}
-                        <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r-2 border-b-2 border-black text-[12px]">{solicted}</td>
-                        <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r-2 border-b-2 border-black text-[12px]">{days.length - (ordinarySchedules[v.policemanId]?.length || 0)}</td>
-                        <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r-2 border-b-2 border-black text-[12px]">{scaledCount}</td>
-                        <td className={cn(
-                          "text-center font-black border-r-2 border-b-2 border-black text-[12px]",
-                          remaining > 0 ? "bg-rose-50/50 text-rose-600" : "bg-emerald-50 text-emerald-500"
-                        )}>{remaining}</td>
-
-                        {/* Matrix cells for each day */}
-                        {days.map(date => {
-                          const dayNum = getDate(date);
-                          const isOrd = (ordinarySchedules[v.policemanId] || []).includes(dayNum);
-                          const scales = scaledPMRecords.filter(e => isSameDay(e.date.toDate(), date));
-                          const currentSelectedService = selectedServiceId ? services.find(s => s.id === selectedServiceId) : null;
-                          const dateStr = format(date, 'yyyy-MM-dd');
-
-                          // Vacancy check for the selected service on this specific date
-                          const escalaToday = joinedEscalas.find(e => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
-                          const slotsUsed = escalaToday?.policemenIds.length || 0;
-                          const slotsMax = currentSelectedService?.vagasNecessarias || 0;
-                          const isFull = slotsMax > 0 && slotsUsed >= slotsMax;
-
-                          const isServiceActiveOnThisDay = currentSelectedService ? (
-                             currentSelectedService.activationType === 'ALL' || 
-                             (currentSelectedService.activeDates || []).includes(dateStr)
-                          ) : false;
-                          
-                          // Check if person already has a scale of the SAME type as currently selected
-                          const hasSameTypeScale = currentSelectedService && scales.some(s => s.service?.tipo === currentSelectedService.tipo);
-
-                          const isCurrentlyTarget = assignmentModal?.policemanId === v.policemanId && isSameDay(assignmentModal.date, date);
-                          const isSubmittingThisCell = submitting && isCurrentlyTarget;
-                          
-                          return (
-                            <td 
-                              key={date.toISOString()}
-                              onDragOver={(e) => {
-                                if (!isOrd && !hasSameTypeScale) {
-                                  e.preventDefault();
-                                  e.currentTarget.classList.add('bg-emerald-100');
-                                }
-                              }}
-                              onDragLeave={(e) => {
-                                e.currentTarget.classList.remove('bg-emerald-100');
-                              }}
-                              onDrop={(e) => {
-                                if (isOrd || submitting) return;
-                                e.preventDefault();
-                                e.currentTarget.classList.remove('bg-emerald-100');
-                                const draggedServiceId = e.dataTransfer.getData('serviceId');
-                                if (draggedServiceId) {
-                                  // Validation for active day
-                                  const ds = services.find(s => s.id === draggedServiceId);
-                                  
-                                  // Specific type check for drop
-                                  const alreadyHasType = ds && scales.some(s => s.service?.tipo === ds.tipo);
-                                  if (alreadyHasType && ds?.tipo === 'PJES') {
-                                    alert(`Este policial já possui uma escala de PJES para este dia.`);
-                                    return;
-                                  }
-
-                                  const dStr = format(date, 'yyyy-MM-dd');
-                                  const active = ds && (ds.activationType === 'ALL' || (ds.activeDates || []).includes(dStr));
-                                  
-                                  if (!active) {
-                                    alert('Este serviço não está ativo para esta data específica.');
-                                    return;
-                                  }
-
-                                  // Vacancy Check for drop
-                                  const scaleToday = joinedEscalas.find(e => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
-                                  const used = scaleToday?.policemenIds.length || 0;
-                                  const max = ds.vagasNecessarias || 0;
-                                  if (max > 0 && used >= max) {
-                                    alert(`Este serviço (${ds.sigla}) já atingiu o limite de vagas para este dia.`);
-                                    return;
-                                  }
-
-                                  handleAssignService(draggedServiceId, { 
-                                    policemanId: v.policemanId, 
-                                    date 
-                                  });
-                                }
-                              }}
-                              onClick={() => {
-                                if (submitting) return;
-                                if (isOrd) {
-                                  alert('Este policial está em SERVIÇO ORDINÁRIO nesta data. Escala extra não permitida.');
-                                  return;
-                                }
-                                if (selectedServiceId) {
-                                  if (!isServiceActiveOnThisDay) {
-                                    alert('Este serviço não está configurado para estar ativo nesta data.');
-                                    return;
-                                  }
-
-                                  if (isFull) {
-                                    alert('Todas as vagas para este serviço já foram preenchidas nesta data.');
-                                    return;
-                                  }
-                                  
-                                  if (hasSameTypeScale && currentSelectedService?.tipo === 'PJES') {
-                                     alert(`Este policial já possui uma escala de PJES para este dia.`);
-                                     return;
-                                  }
-
-                                  handleAssignService(selectedServiceId, { 
-                                    policemanId: v.policemanId, 
-                                    date 
-                                  });
-                                } else {
-                                  setAssignmentModal({ 
-                                    policemanId: v.policemanId, 
-                                    policemanName: v.policeman?.nomeGuerra || 'PM',
-                                    policemanMat: v.policeman?.matricula || '',
-                                    date
-                                  });
-                                }
-                              }}
-                              className={cn(
-                                "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-14 w-14",
-                                !isOrd ? "cursor-pointer" : "bg-pmpe-red shadow-inner",
-                                isWeekend(date) && !isOrd && "bg-slate-50/50",
-                                scales.length === 0 && !isOrd ? "bg-slate-50 hover:bg-slate-200" : "",
-                                selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? (
-                                  isFull 
-                                    ? "bg-rose-50/70 ring-inset ring-2 ring-rose-500/30 cursor-not-allowed opacity-60" 
-                                    : "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/20 z-10"
-                                ) : "",
-                                isSubmittingThisCell ? "bg-amber-100" : ""
-                              )}
-                            >
-                               <div className="w-full h-full flex flex-col items-stretch justify-center font-black text-[9px] uppercase tracking-tighter overflow-hidden">
-                                  {isSubmittingThisCell && scales.length === 0 ? (
-                                    <div className="flex items-center justify-center h-full">
-                                      <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                                    </div>
-                                  ) : scales.length > 0 ? (
-                                    <div className="flex flex-col h-full w-full">
-                                      {scales.map((s, idx) => (
-                                        <motion.div 
-                                          key={s.id || idx}
-                                          initial={{ scale: 0.8, opacity: 0 }} 
-                                          animate={{ scale: 1, opacity: 1 }}
-                                          className="flex-1 flex flex-col items-center justify-center text-white drop-shadow-sm px-1 border-b border-black/10 last:border-0 py-0.5 overflow-hidden"
-                                          style={{ backgroundColor: s.service?.color || '#334155' }}
-                                        >
-                                          <div className="flex flex-col items-center justify-center text-center w-full min-h-0">
-                                             <span className="text-[8px] font-black leading-tight tracking-tighter">{s.service?.sigla || 'ESC'}</span>
-                                             <span className="text-[6px] font-black opacity-90 leading-none truncate w-full px-0.5 mt-0.5 uppercase">{s.service?.nome}</span>
-                                          </div>
-                                          {s.service?.vagasNecessarias && s.policemenIds.length >= s.service.vagasNecessarias && (
-                                            <div className="absolute top-0 right-0 p-0.5">
-                                              <Check className="w-1.5 h-1.5 text-emerald-400" />
-                                            </div>
-                                          )}
-                                        </motion.div>
-                                      ))}
-                                      {isSubmittingThisCell && (
-                                        <div className="bg-amber-100 flex items-center justify-center py-0.5">
-                                          <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : isOrd ? (
-                                    <div className="bg-pmpe-red w-full h-full flex flex-col items-center justify-center text-white">
-                                      <CheckCircle2 className="w-3.5 h-3.5 mb-0.5" />
-                                      <span className="text-[7px] font-black tracking-tighter opacity-80">ORDINÁRIO</span>
-                                    </div>
-                                  ) : isFull && selectedServiceId ? (
-                                    <div className="w-full h-full flex flex-col items-center justify-center bg-rose-50/50">
-                                      <span className="text-[8px] text-rose-500 font-black leading-none mb-0.5">LOTADO</span>
-                                      <span className="text-[10px] font-black text-rose-600">{slotsUsed}/{slotsMax}</span>
-                                    </div>
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center group-matrix-cell">
-                                       <span className={cn(
-                                          "text-[12px] font-bold transition-all",
-                                          selectedServiceId && isServiceActiveOnThisDay ? "text-emerald-600 animate-pulse scale-150" : "text-slate-300"
-                                       )}>0</span>
-                                    </div>
-                                  )}
-                               </div>
-                               
-                               {!isOrd && (
-                                 <div className={cn(
-                                    "absolute inset-x-0 bottom-0 h-0.5 scale-x-0 group-matrix-cell-hover:scale-x-100 transition-transform origin-center",
-                                    selectedServiceId ? "bg-emerald-500" : "bg-pmpe-navy"
-                                 )} />
-                               )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
+                  ) : (
+                    <SortableContext
+                      items={filteredVolunteers.map(v => v.id!)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {filteredVolunteers.map(v => (
+                        <SortableRow 
+                          key={v.id}
+                          v={v}
+                          policemanId={v.policemanId}
+                          policeman={v.policeman}
+                          cotas={v.cotas}
+                          joinedEscalas={joinedEscalas}
+                          activeTab={activeTab}
+                          days={days}
+                          ordinarySchedules={ordinarySchedules}
+                          services={services}
+                          selectedServiceId={selectedServiceId}
+                          assignmentModal={assignmentModal}
+                          submitting={submitting}
+                          searchTerm={searchTerm}
+                          isAdmin={isAdmin}
+                          handleAssignService={handleAssignService}
+                          handleRemoveFromScale={handleRemoveFromScale}
+                          setAssignmentModal={setAssignmentModal}
+                          sortBy={sortBy}
+                        />
+                      ))}
+                    </SortableContext>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1432,7 +1307,251 @@ const CreateEscala = () => {
         .group-matrix-cell:hover .group-matrix-cell-hover\\:text-slate-400 { color: #94a3b8; }
         .group-matrix-cell:hover .group-matrix-cell-hover\\:flex { display: flex; }
       `}</style>
+      </DndContext>
     </div>
+  );
+};
+
+// --- Sortable Component for matrix rows ---
+const SortableRow = ({ 
+  v, 
+  policemanId, 
+  policeman, 
+  cotas, 
+  joinedEscalas, 
+  activeTab, 
+  days, 
+  ordinarySchedules, 
+  services,
+  selectedServiceId,
+  assignmentModal,
+  submitting,
+  searchTerm,
+  isAdmin,
+  handleAssignService,
+  handleRemoveFromScale,
+  setAssignmentModal,
+  sortBy
+}: any) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: v.id! });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 40 : 1,
+    position: 'relative' as const,
+  };
+
+  const scaledPMRecords = joinedEscalas.filter((e: any) => e.policemenIds.includes(policemanId));
+  const currentTabScales = scaledPMRecords.filter((e: any) => e.service?.tipo?.toUpperCase() === activeTab);
+  const scaledCount = currentTabScales.length;
+  const solicted = cotas || 0;
+  const remaining = solicted - scaledCount;
+
+  return (
+    <tr 
+      ref={setNodeRef} 
+      style={style}
+      className={cn(
+        "h-12 hover:bg-slate-50 transition-colors group",
+        isDragging && "bg-slate-50 shadow-lg"
+      )}
+    >
+      {/* Fixed ID Info */}
+      <td className="sticky left-0 z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-black text-slate-500 border-r-2 border-b-2 border-black">
+        <div className="flex items-center gap-1">
+           {sortBy === 'order' && !searchTerm && isAdmin && (
+             <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-slate-300 hover:text-slate-500">
+               <GripVertical className="w-3.5 h-3.5" />
+             </div>
+           )}
+           <span className="flex-1">{policeman?.graduacaoPosto.substring(0, 3)}</span>
+        </div>
+      </td>
+      <td className="sticky left-[60px] z-10 p-3 bg-white group-hover:bg-slate-50 text-center font-bold text-slate-500 border-r-2 border-b-2 border-black">{policeman?.matricula}</td>
+      <td className="sticky left-[150px] z-10 p-3 bg-white group-hover:bg-slate-50 font-black text-pmpe-navy uppercase pl-5 border-r-2 border-b-2 border-black truncate">
+         <span className="truncate">{policeman?.nomeGuerra}</span>
+      </td>
+
+      {/* Stats Dynamic Columns */}
+      <td className="bg-amber-50/20 text-center font-black text-amber-600 border-r-2 border-b-2 border-black text-[12px]">{solicted}</td>
+      <td className="bg-slate-50/50 text-center font-bold text-slate-300 italic border-r-2 border-b-2 border-black text-[12px]">{days.length - (ordinarySchedules[policemanId]?.length || 0)}</td>
+      <td className="bg-emerald-50/50 text-center font-black text-emerald-600 border-r-2 border-b-2 border-black text-[12px]">{scaledCount}</td>
+      <td className={cn(
+        "text-center font-black border-r-2 border-b-2 border-black text-[12px]",
+        remaining > 0 ? "bg-rose-50/50 text-rose-600" : "bg-emerald-50 text-emerald-500"
+      )}>{remaining}</td>
+
+      {/* Matrix cells for each day */}
+      {days.map((date: Date) => {
+        const dayNum = getDate(date);
+        const isOrd = (ordinarySchedules[policemanId] || []).includes(dayNum);
+        const scales = scaledPMRecords.filter((e: any) => isSameDay(e.date.toDate(), date));
+        const currentSelectedService = selectedServiceId ? services.find((s: any) => s.id === selectedServiceId) : null;
+        const dateStr = format(date, 'yyyy-MM-dd');
+
+        // Vacancy check for the selected service on this specific date
+        const escalaToday = joinedEscalas.find((e: any) => e.serviceTypeId === selectedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr);
+        const slotsUsed = escalaToday?.policemenIds.length || 0;
+        const slotsMax = currentSelectedService?.vagasNecessarias || 0;
+        const isFull = slotsMax > 0 && slotsUsed >= slotsMax;
+
+        const isServiceActiveOnThisDay = currentSelectedService ? (
+           currentSelectedService.activationType === 'ALL' || 
+           (currentSelectedService.activeDates || []).includes(dateStr)
+        ) : false;
+        
+        // Check if person already has a scale of the SAME type as currently selected
+        const hasSameTypeScale = currentSelectedService && scales.some((s: any) => s.service?.tipo === currentSelectedService.tipo);
+
+        const isCurrentlyTarget = assignmentModal?.policemanId === policemanId && isSameDay(assignmentModal.date, date);
+        const isSubmittingThisCell = submitting && isCurrentlyTarget;
+        
+        return (
+          <td 
+            key={date.toISOString()}
+            onDragOver={(e) => {
+              if (!isOrd && !hasSameTypeScale) {
+                e.preventDefault();
+                e.currentTarget.classList.add('bg-emerald-100');
+              }
+            }}
+            onDragLeave={(e) => {
+              e.currentTarget.classList.remove('bg-emerald-100');
+            }}
+            onDrop={(e) => {
+              if (isOrd || submitting) return;
+              e.preventDefault();
+              e.currentTarget.classList.remove('bg-emerald-100');
+              const draggedServiceId = e.dataTransfer.getData('serviceId');
+              if (draggedServiceId) {
+                // Validation for active day
+                const ds = services.find((s: any) => s.id === draggedServiceId);
+                
+                // Specific type check for drop
+                const alreadyHasType = ds && scales.some((s: any) => s.service?.tipo === ds.tipo);
+                if (alreadyHasType && ds?.tipo === 'PJES') {
+                  alert(`Este policial já possui uma escala de PJES para este dia.`);
+                  return;
+                }
+
+                const dStr = format(date, 'yyyy-MM-dd');
+                const active = ds && (ds.activationType === 'ALL' || (ds.activeDates || []).includes(dStr));
+                
+                if (!active) {
+                  alert('Este serviço não está ativo para esta data específica.');
+                  return;
+                }
+
+                // Vacancy Check for drop
+                const scaleToday = joinedEscalas.find((e: any) => e.serviceTypeId === draggedServiceId && format(e.date.toDate(), 'yyyy-MM-dd') === dStr);
+                const used = scaleToday?.policemenIds.length || 0;
+                const max = ds.vagasNecessarias || 0;
+                if (max > 0 && used >= max) {
+                  alert(`Este serviço (${ds.sigla}) já atingiu o limite de vagas para este dia.`);
+                  return;
+                }
+
+                handleAssignService(draggedServiceId, { 
+                  policemanId: policemanId, 
+                  date 
+                });
+              }
+            }}
+            onClick={() => {
+              if (submitting) return;
+              if (isOrd) {
+                alert('Este policial está em SERVIÇO ORDINÁRIO nesta data. Escala extra não permitida.');
+                return;
+              }
+              if (selectedServiceId) {
+                if (!isServiceActiveOnThisDay) {
+                  alert('Este serviço não está configurado para estar ativo nesta data.');
+                  return;
+                }
+                if (hasSameTypeScale && currentSelectedService?.tipo === 'PJES') {
+                  alert('Este policial já possui uma escala de PJES para este dia.');
+                  return;
+                }
+                if (isFull) return; // Silent return for full vacancy on click
+                
+                handleAssignService(selectedServiceId, { 
+                  policemanId: policemanId, 
+                  date 
+                });
+              } else {
+                if (scales.length > 0) {
+                  setAssignmentModal({
+                     policemanId: policemanId,
+                     policemanName: policeman?.nomeGuerra || '',
+                     policemanMat: policeman?.matricula || '',
+                     date: date
+                  });
+                }
+              }
+            }}
+            className={cn(
+              "relative p-0 border-r-2 border-b-2 border-black transition-all text-center h-14 w-14",
+              !isOrd ? "cursor-pointer" : "bg-pmpe-red shadow-inner",
+              isWeekend(date) && !isOrd && "bg-slate-50/50",
+              scales.length === 0 && !isOrd ? "bg-slate-50 hover:bg-slate-200" : "",
+              selectedServiceId && isServiceActiveOnThisDay && !isOrd && !hasSameTypeScale ? (
+                isFull 
+                  ? "bg-rose-50/70 ring-inset ring-2 ring-rose-500/30 cursor-not-allowed opacity-60" 
+                  : "bg-emerald-50/50 ring-inset ring-2 ring-emerald-500/30 group-hover:bg-emerald-100"
+              ) : "",
+              isCurrentlyTarget && "z-50 ring-4 ring-pmpe-gold/50 shadow-2xl scale-105"
+            )}
+          >
+             {scales.length > 0 ? (
+                  <div className="flex flex-col gap-0.5 p-1 h-full overflow-hidden">
+                    {scales.map((e: any) => (
+                      <div 
+                        key={e.id}
+                        className="text-[7px] font-black text-white px-1.5 py-0.5 rounded-sm shadow-sm truncate flex items-center justify-between"
+                        style={{ backgroundColor: e.service?.color || '#000' }}
+                      >
+                        <span>{e.service?.sigla}</span>
+                        {isAdmin && (
+                          <button 
+                            onClick={(e2) => {
+                              e2.stopPropagation();
+                              handleRemoveFromScale(e.id!, policemanId);
+                            }}
+                            className="ml-1 opacity-0 group-hover:opacity-100 hover:text-rose-200"
+                          >
+                            <X className="w-2 h-2" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : isOrd ? (
+                  <div className="bg-pmpe-red w-full h-full flex flex-col items-center justify-center text-white">
+                    <CheckCircle2 className="w-3.5 h-3.5 mb-0.5" />
+                    <span className="text-[7px] font-black tracking-tighter opacity-80">ORDINÁRIO</span>
+                  </div>
+                ) : isFull && selectedServiceId ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-rose-50/50">
+                    <span className="text-[8px] text-rose-500 font-black leading-none mb-0.5">LOTADO</span>
+                  </div>
+                ) : isSubmittingThisCell ? (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-pmpe-navy/20 border-t-pmpe-navy rounded-full animate-spin" />
+                  </div>
+                ) : null}
+          </td>
+        );
+      })}
+    </tr>
   );
 };
 
