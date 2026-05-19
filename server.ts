@@ -20,10 +20,11 @@ async function startServer() {
         existingEscalas, 
         ordinarySchedules, 
         quotaSettings = { pjesMPTotal: 0, pjesForumTotal: 0, pjesEscolarTotal: 0, pjesDecretoTotal: 0, opsTotal: 0 },
-        currentMonth 
+        currentMonth,
+        fairMode = false
       } = req.body;
 
-      console.log(`[AI] Processing schedule for ${currentMonth}. Volunteers: ${volunteers?.length}, Services: ${services?.length}`);
+      console.log(`[AI] Processing schedule for ${currentMonth}. Volunteers: ${volunteers?.length}, Services: ${services?.length}, FairMode: ${fairMode}`);
 
       if (!process.env.GEMINI_API_KEY) {
         console.error("[AI] GEMINI_API_KEY is missing");
@@ -41,7 +42,9 @@ async function startServer() {
         4. Limite de 1 PJES por dia por policial.
         5. Respeite as cotas individuais do voluntário (campo 'cotas').
         6. Respeite as vagas diárias do serviço ('vagasNecessarias').
-        7. Prioridade: Policiais mais antigos (menor valor no campo 'antiguidade').
+        7. ${fairMode 
+            ? "MODO DISTRIBUIÇÃO JUSTA: IGNORE ANTIGUIDADE. Tente equilibrar a carga de trabalho de forma que o número de escalas por policial seja o mais uniforme possível (mesma quantidade para todos)." 
+            : "Prioridade: Policiais mais antigos (menor valor no campo 'antiguidade')."}
         
         SAÍDA: JSON puro no formato especificado.
       `;
