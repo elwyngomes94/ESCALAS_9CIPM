@@ -173,9 +173,10 @@ const CreateEscala = () => {
       // Check remaining quotas
       const scaledCount = joinedEscalas.filter(e => 
         e.policemenIds.includes(v.policemanId) && 
-        e.service?.tipo === service.tipo
-      ).length;
-      if (scaledCount >= (v.cotas || 0) && service.tipo === 'PJES') return false;
+        e.service?.tipo?.toUpperCase() === service.tipo?.toUpperCase()
+      ).reduce((acc, e) => acc + Number(e.service?.cotasPorServico || 1), 0);
+      
+      if (scaledCount >= Number(v.cotas || 0) && service.tipo === 'PJES') return false;
 
       return true;
     });
@@ -389,17 +390,19 @@ const CreateEscala = () => {
 
     // 3. Quota Check for the Policeman (Volunteered Quotas) - SKIP IF OPS
     if (typeBeingAssigned !== 'OPS') {
-      const volunteer = joinedVolunteers.find(v => v.policemanId === policemanId && v.type === typeBeingAssigned);
-      const maxAllowedQuotas = volunteer?.cotas || 0;
+      const volunteer = joinedVolunteers.find(v => v.policemanId === policemanId && v.type?.toUpperCase() === typeBeingAssigned?.toUpperCase());
+      const maxAllowedQuotas = Number(volunteer?.cotas || 0);
       
       // Sum of quotas already used by this policeman in this month for this service type
       const currentMonthCotasUsed = joinedEscalas.filter(e => 
         e.policemenIds.includes(policemanId) && 
-        e.service?.tipo === typeBeingAssigned
-      ).reduce((acc, e) => acc + (e.service?.cotasPorServico || 1), 0);
+        e.service?.tipo?.toUpperCase() === typeBeingAssigned?.toUpperCase()
+      ).reduce((acc, e) => acc + Number(e.service?.cotasPorServico || 1), 0);
 
-      if (currentMonthCotasUsed + needed > maxAllowedQuotas) {
-        alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas.`);
+      const neededValue = Number(needed);
+
+      if (currentMonthCotasUsed + neededValue > maxAllowedQuotas) {
+        alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar mais ${neededValue}.`);
         return;
       }
     }
@@ -1352,8 +1355,8 @@ const SortableRow = ({
 
   const scaledPMRecords = joinedEscalas.filter((e: any) => e.policemenIds.includes(policemanId));
   const currentTabScales = scaledPMRecords.filter((e: any) => e.service?.tipo?.toUpperCase() === activeTab);
-  const scaledCount = currentTabScales.length;
-  const solicted = cotas || 0;
+  const scaledCount = currentTabScales.reduce((acc: number, e: any) => acc + Number(e.service?.cotasPorServico || 1), 0);
+  const solicted = Number(cotas || 0);
   const remaining = solicted - scaledCount;
 
   return (
