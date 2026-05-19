@@ -401,8 +401,8 @@ const CreateEscala = () => {
 
       const neededValue = Number(needed);
 
-      if (currentMonthCotasUsed + neededValue > maxAllowedQuotas) {
-        alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar mais ${neededValue}.`);
+    if (currentMonthCotasUsed + neededValue > maxAllowedQuotas) {
+        alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar um serviço que consome ${neededValue}.`);
         return;
       }
     }
@@ -1484,21 +1484,22 @@ const SortableRow = ({
                   alert('Este policial já possui uma escala de PJES para este dia.');
                   return;
                 }
-                if (isFull) return; // Silent return for full vacancy on click
+                if (isFull) {
+                  alert(`Este serviço (${currentSelectedService?.sigla}) já atingiu o limite de vagas para este dia.`);
+                  return;
+                }
                 
                 handleAssignService(selectedServiceId, { 
                   policemanId: policemanId, 
                   date 
                 });
               } else {
-                if (scales.length > 0) {
-                  setAssignmentModal({
-                     policemanId: policemanId,
-                     policemanName: policeman?.nomeGuerra || '',
-                     policemanMat: policeman?.matricula || '',
-                     date: date
-                  });
-                }
+                setAssignmentModal({
+                   policemanId: policemanId,
+                   policemanName: policeman?.nomeGuerra || '',
+                   policemanMat: policeman?.matricula || '',
+                   date: date
+                });
               }
             }}
             className={cn(
