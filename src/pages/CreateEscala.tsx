@@ -86,7 +86,7 @@ const CreateEscala = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
-  const [sortBy, setSortBy] = useState<'graduacaoPosto' | 'matricula' | 'nomeGuerra' | 'order'>('order');
+  const [sortBy, setSortBy] = useState<'graduacaoPosto' | 'matricula' | 'nomeGuerra' | 'antiguidade' | 'order'>('order');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const mKey = format(currentMonth, 'yyyy-MM');
@@ -180,16 +180,16 @@ const CreateEscala = () => {
       return true;
     });
 
-    // Sort by Manual Order
+    // Sort by Seniority (Antiguidade - lower is better in military logic: 1 is top)
     candidates.sort((a, b) => {
-      const orderA = a.order ?? 9999;
-      const orderB = b.order ?? 9999;
-      return orderA - orderB;
+      const antA = a.policeman?.antiguidade || 9999;
+      const antB = b.policeman?.antiguidade || 9999;
+      return antA - antB;
     });
 
     if (candidates.length > 0) {
       const best = candidates[0];
-      if (window.confirm(`Sugerimos: ${best.policeman?.graduacaoPosto} ${best.policeman?.nomeGuerra} (Próximo na Ordem). Deseja escalar?`)) {
+      if (window.confirm(`Sugerimos: ${best.policeman?.graduacaoPosto} ${best.policeman?.nomeGuerra} (Mais Antigo Disponível). Deseja escalar?`)) {
         handleAssignService(selectedServiceId, { policemanId: best.policemanId, date });
       }
     } else {
@@ -646,8 +646,14 @@ const CreateEscala = () => {
       let valB: any = polyB[sortBy];
 
       // Special handling for Graduação/Posto to use military hierarchy if needed, 
-      // but for now simple string sort.
+      // but for now simple string sort or antiguidade is better.
+      // If sorting by antiguidade, it's numeric.
       
+      if (sortBy === 'antiguidade') {
+        valA = polyA.antiguidade || 99999;
+        valB = polyB.antiguidade || 99999;
+      }
+
       if (sortBy === 'order') {
         valA = a.order ?? 99999;
         valB = b.order ?? 99999;
@@ -950,13 +956,22 @@ const CreateEscala = () => {
                         EFETIVO
                         <div className="flex items-center gap-2">
                            <button 
+                             onClick={(e) => { e.stopPropagation(); handleSort('antiguidade'); }}
+                             className={cn(
+                               "px-2 py-0.5 rounded text-[8px] border transition-all",
+                               sortBy === 'antiguidade' ? "bg-pmpe-gold text-pmpe-navy border-pmpe-gold" : "bg-white/10 border-white/20 text-white/60"
+                             )}
+                           >
+                             SORT: ANTIGUIDADE
+                           </button>
+                           <button 
                              onClick={(e) => { e.stopPropagation(); handleSort('order'); }}
                              className={cn(
                                "px-2 py-0.5 rounded text-[8px] border transition-all",
                                sortBy === 'order' ? "bg-pmpe-gold text-pmpe-navy border-pmpe-gold" : "bg-white/10 border-white/20 text-white/60"
                              )}
                            >
-                             ORDEM PERSONALIZADA
+                             PERSONALIZADO
                            </button>
                            {sortBy === 'nomeGuerra' && (
                              sortOrder === 'asc' ? <ChevronLeft className="w-2.5 h-2.5 rotate-90 text-pmpe-gold" /> : <ChevronLeft className="w-2.5 h-2.5 -rotate-90 text-pmpe-gold" />
