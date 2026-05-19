@@ -808,22 +808,25 @@ const Escalas = () => {
                         <div 
                           key={service.id} 
                           data-type={service.tipo} 
-                          className="official-report-table bg-white p-1 shadow-2xl border-2 rounded-lg overflow-x-auto mb-16 last:mb-0"
-                          style={{ borderColor: '#e2e8f0' }}
+                          className="official-report-table p-1 border-2 rounded-lg overflow-x-auto mb-16 last:mb-0"
+                          style={{ borderColor: '#e2e8f0', backgroundColor: '#ffffff' }}
                         >
                           <div className="min-w-[900px]">
                               <div 
-                                className="text-black font-black text-center py-3 border-2 border-black uppercase text-base"
-                                style={{ backgroundColor: '#f28c28' }}
+                                className="font-black text-center py-3 border-2 border-black uppercase text-base"
+                                style={{ backgroundColor: '#f28c28', color: '#000000' }}
                               >
                                 ESCALA {service.nome} – 9ª CIPM – {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
                               </div>
                               
-                              <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[11px] tracking-widest">
+                              <div 
+                                className="font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[11px] tracking-widest"
+                                style={{ backgroundColor: '#dcdcdc', color: '#000000' }}
+                              >
                                 LOCAL: {service.cidade} – {service.horarioInicio} AS {service.horarioTermino}
                               </div>
 
-                              <table className="w-full border-collapse text-[11px]">
+                              <table className="w-full border-collapse text-[11px]" style={{ color: '#000000' }}>
                                 <thead>
                                   <tr 
                                     className="font-black uppercase text-center border-x-2 border-black border-b-2 border-black"
@@ -861,9 +864,9 @@ const Escalas = () => {
                                   ))}
                                 </tbody>
                                 <tfoot>
-                                  <tr className="bg-[#dcdcdc] font-black border-x-2 border-b-2 border-black h-12">
+                                  <tr className="font-black border-x-2 border-b-2 border-black h-12" style={{ backgroundColor: '#dcdcdc', color: '#000000' }}>
                                     <td colSpan={6} className="p-2 text-center border-r-2 border-black uppercase text-sm">TOTAL</td>
-                                    <td colSpan={2} className="p-2 text-center text-xl bg-white">{totalCotasValue}</td>
+                                    <td colSpan={2} className="p-2 text-center text-xl bg-white" style={{ backgroundColor: '#ffffff' }}>{totalCotasValue}</td>
                                   </tr>
                                 </tfoot>
                               </table>
@@ -1322,22 +1325,28 @@ const Escalas = () => {
       {/* Hidden high-res renderer for individual PDF export */}
       <div className="fixed top-[-9999px] left-[-9999px] pointer-events-none opacity-0">
         {scaleToPrint && (
-          <div ref={printSingleRef} className="bg-white p-5 w-[900px] border-2 border-black">
+          <div ref={printSingleRef} className="p-5 w-[900px] border-2 border-black" style={{ backgroundColor: '#ffffff', color: '#000000' }}>
             {/* Header section similar to image */}
             <div 
-              className="text-black font-black text-center py-4 border-2 border-black uppercase text-xl"
-              style={{ backgroundColor: '#f28c28' }}
+              className="font-black text-center py-4 border-2 border-black uppercase text-xl"
+              style={{ backgroundColor: '#f28c28', color: '#000000' }}
             >
               ESCALA {scaleToPrint.service?.nome} – 9ª CIPM – {scaleToPrint.date ? format(scaleToPrint.date.toDate(), 'MMMM yyyy', { locale: ptBR }) : ''}
             </div>
             
-            <div className="bg-[#dcdcdc] text-black font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[12px] tracking-widest">
+            <div 
+              className="font-black text-center py-2 border-x-2 border-b-2 border-black uppercase text-[12px] tracking-widest"
+              style={{ backgroundColor: '#dcdcdc', color: '#000000' }}
+            >
               LOCAL: {scaleToPrint.service?.cidade} – {scaleToPrint.service?.horarioInicio} AS {scaleToPrint.service?.horarioTermino}
             </div>
 
-            <table className="w-full border-collapse text-[12px]">
+            <table className="w-full border-collapse text-[12px]" style={{ color: '#000000' }}>
               <thead>
-                <tr className="bg-white font-black uppercase text-center border-x-2 border-black border-b-2 border-black">
+                <tr 
+                  className="font-black uppercase text-center border-x-2 border-black border-b-2 border-black"
+                  style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                >
                   <th className="border-r-2 border-black py-3 px-2 w-[15%]">GRADUAÇÃO</th>
                   <th className="border-r-2 border-black py-3 px-2 w-[15%]">MATRÍCULA</th>
                   <th className="border-r-2 border-black py-3 px-2">NOME DE GUERRA</th>
@@ -1347,7 +1356,7 @@ const Escalas = () => {
               </thead>
               <tbody>
                 {scaleToPrint.policemen?.map((pol: any, idx: number) => (
-                  <tr key={idx} className="border-x-2 border-b-2 border-black text-center font-black">
+                  <tr key={idx} className="border-x-2 border-b-2 border-black text-center font-black" style={{ color: '#000000' }}>
                     <td className="border-r-2 border-black py-2.5">{pol.graduacaoPosto}</td>
                     <td className="border-r-2 border-black py-2.5">{pol.matricula}</td>
                     <td 
@@ -1366,7 +1375,7 @@ const Escalas = () => {
             </table>
 
             {scaleToPrint.observations && (
-              <div className="mt-6 p-4 border-2 border-black">
+              <div className="mt-6 p-4 border-2 border-black" style={{ color: '#000000' }}>
                 <p className="text-[11px] font-black uppercase mb-1 underline">Observações:</p>
                 <p 
                   className="text-[13px] font-bold whitespace-pre-wrap"
