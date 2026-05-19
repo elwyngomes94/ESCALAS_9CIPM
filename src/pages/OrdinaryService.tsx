@@ -20,9 +20,15 @@ import {
   CheckCircle2,
   AlertCircle,
   UserCheck,
-  ShieldAlert
+  Printer,
+  Share2,
+  X,
+  Download,
+  Phone,
+  MessageSquare,
+  FileText
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths, isSameDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths, isSameDay, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType, cn } from '../lib/utils';
@@ -39,6 +45,7 @@ const OrdinaryService = () => {
   const [filterVolunteers, setFilterVolunteers] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedPolicemanCalendar, setSelectedPolicemanCalendar] = useState<Policeman | null>(null);
 
   const monthKey = format(currentDate, 'yyyy-MM');
   const monthName = format(currentDate, 'MMMM yyyy', { locale: ptBR });
@@ -286,15 +293,18 @@ const OrdinaryService = () => {
                   <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-all group">
                     <td className="sticky left-0 bg-white group-hover:bg-slate-50 z-10 px-6 py-3 border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
                       <div className="flex flex-col">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-bold text-pmpe-navy">{p.graduacaoPosto} {p.nomeGuerra}</span>
+                        <button 
+                          onClick={() => setSelectedPolicemanCalendar(p)}
+                          className="flex items-center gap-1.5 hover:text-pmpe-gold transition-colors text-left"
+                        >
+                          <span className="text-[11px] font-black text-pmpe-navy">{p.graduacaoPosto} {p.nomeGuerra}</span>
                           {volunteers.some(v => v.policemanId === p.id && v.type === 'PJES') && (
                             <span title="Voluntário PJES" className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                           )}
                           {volunteers.some(v => v.policemanId === p.id && v.type === 'OPS') && (
                             <span title="Voluntário OPS" className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
                           )}
-                        </div>
+                        </button>
                         <span className="text-[9px] text-slate-400 font-bold">{p.matricula}</span>
                       </div>
                     </td>
@@ -368,6 +378,230 @@ const OrdinaryService = () => {
             <CheckCircle2 className="w-5 h-5" />
             <span className="text-xs font-bold uppercase tracking-widest">{successMessage}</span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Personal Calendar Modal */}
+      <AnimatePresence>
+        {selectedPolicemanCalendar && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-pmpe-navy text-white">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-pmpe-gold shadow-inner">
+                    {selectedPolicemanCalendar.graduacaoPosto.substring(0, 2)}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase tracking-tighter">
+                      {selectedPolicemanCalendar.graduacaoPosto} {selectedPolicemanCalendar.nomeGuerra}
+                    </h3>
+                    <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">
+                      RELATÓRIO INDIVIDUAL DE SERVIÇO – {monthName}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedPolicemanCalendar(null)}
+                  className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all border border-white/10"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-8 custom-matrix-scroll">
+                <div id="personal-report-content" className="bg-white p-6 border-2 border-slate-100 rounded-3xl">
+                   <div className="flex items-center justify-between mb-8 border-b-2 border-pmpe-navy/10 pb-6">
+                      <div className="flex items-center gap-3">
+                         <div className="w-12 h-12">
+                            <img src="/logo_9cipm.png" alt="9ª CIPM" className="w-full h-full object-contain" />
+                         </div>
+                         <div>
+                            <p className="text-[11px] font-black text-pmpe-navy uppercase tracking-widest leading-none">9ª CIPM - ARARIPINA</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Polícia Militar de Pernambuco</p>
+                         </div>
+                      </div>
+                      <div className="text-right">
+                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Matrícula</p>
+                         <p className="text-sm font-black text-pmpe-navy">{selectedPolicemanCalendar.matricula}</p>
+                      </div>
+                   </div>
+
+                   {/* Calendar Visualizer */}
+                   <div className="grid grid-cols-7 gap-1.5 mb-8">
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                         <div key={d} className="text-center py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 rounded-lg">
+                            {d}
+                         </div>
+                      ))}
+                      {/* Offset for first day of month */}
+                      {Array.from({ length: startOfMonth(currentDate).getDay() }).map((_, i) => (
+                         <div key={`offset-${i}`} className="h-14 bg-slate-50/30 rounded-xl" />
+                      ))}
+                      {daysInMonth.map(day => {
+                         const d = getDate(day);
+                         const isOrd = (schedules[selectedPolicemanCalendar.id!] || []).includes(d);
+                         const scaled = escalas.filter(e => isSameDay(e.date.toDate(), day) && e.policemenIds.includes(selectedPolicemanCalendar.id!));
+                         const pjesScales = scaled.filter(e => serviceTypes[e.serviceTypeId]?.tipo === 'PJES');
+                         const opsScales = scaled.filter(e => serviceTypes[e.serviceTypeId]?.tipo === 'OPS');
+                         const wknd = isWeekend(day);
+
+                         return (
+                            <div key={d} className={cn(
+                               "h-20 rounded-xl border p-2 flex flex-col justify-between transition-all",
+                               isOrd ? "bg-pmpe-red/5 border-pmpe-red/20" : 
+                               scaled.length > 0 ? "bg-emerald-50 border-emerald-100" :
+                               wknd ? "bg-slate-50 border-slate-100" : "bg-white border-slate-50"
+                            )}>
+                               <div className="flex items-center justify-between">
+                                  <span className={cn(
+                                     "text-[10px] font-black",
+                                     isOrd ? "text-pmpe-red" : "text-slate-400"
+                                  )}>{d}</span>
+                                  {isOrd && <ShieldAlert className="w-2.5 h-2.5 text-pmpe-red" />}
+                               </div>
+                               <div className="space-y-1">
+                                  {pjesScales.map(e => (
+                                     <div key={e.id} className="text-[7px] font-black bg-emerald-500 text-white rounded px-1 py-0.5 truncate uppercase">
+                                        PJES: {serviceTypes[e.serviceTypeId]?.sigla}
+                                     </div>
+                                  ))}
+                                  {opsScales.map(e => (
+                                     <div key={e.id} className="text-[7px] font-black bg-blue-500 text-white rounded px-1 py-0.5 truncate uppercase">
+                                        OPS: {serviceTypes[e.serviceTypeId]?.sigla}
+                                     </div>
+                                  ))}
+                                  {isOrd && (
+                                     <div className="text-[7px] font-black bg-pmpe-red text-white rounded px-1 py-0.5 truncate uppercase">
+                                        ORDINÁRIO
+                                     </div>
+                                  )}
+                               </div>
+                            </div>
+                         );
+                      })}
+                   </div>
+
+                   {/* List View for Report */}
+                   <div className="space-y-3">
+                      <h4 className="text-[10px] font-black text-pmpe-navy uppercase tracking-widest flex items-center gap-2 mb-4">
+                         <div className="w-1.5 h-1.5 rounded-full bg-pmpe-gold" />
+                         Resumo de Empenhamento
+                      </h4>
+                      <table className="w-full text-left">
+                         <thead>
+                            <tr className="border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                               <th className="py-2">Data</th>
+                               <th className="py-2">Serviço/Unidade</th>
+                               <th className="py-2">Tipo</th>
+                               <th className="py-2">Horário</th>
+                            </tr>
+                         </thead>
+                         <tbody className="text-[10px] uppercase font-bold text-slate-700">
+                            {(schedules[selectedPolicemanCalendar.id!] || []).map(dayNum => (
+                               <tr key={`ord-${dayNum}`} className="border-b border-slate-50">
+                                  <td className="py-2">{dayNum} / {format(currentDate, 'MM/yy')}</td>
+                                  <td className="py-2">SERVICIO ORDINÁRIO 9ª CIPM</td>
+                                  <td className="py-2"><span className="text-pmpe-red">ORDINÁRIO</span></td>
+                                  <td className="py-2">-</td>
+                               </tr>
+                            ))}
+                            {escalas.filter(e => e.policemenIds.includes(selectedPolicemanCalendar.id!))
+                              .sort((a, b) => a.date.toDate().getTime() - b.date.toDate().getTime())
+                              .map(e => {
+                                 const sType = serviceTypes[e.serviceTypeId];
+                                 return (
+                                    <tr key={e.id} className="border-b border-slate-50">
+                                       <td className="py-2">{format(e.date.toDate(), 'dd/MM/yy')}</td>
+                                       <td className="py-2">{sType?.nome} ({sType?.cidade})</td>
+                                       <td className="py-2">
+                                          <span className={sType?.tipo === 'PJES' ? "text-emerald-600" : "text-blue-600"}>
+                                             {sType?.tipo}
+                                          </span>
+                                       </td>
+                                       <td className="py-2">{sType?.horarioInicio} - {sType?.horarioTermino}</td>
+                                    </tr>
+                                 );
+                              })}
+                         </tbody>
+                      </table>
+                   </div>
+                   
+                   <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between">
+                      <div className="text-[8px] font-bold text-slate-400 uppercase italic">
+                         Gerado via Sistema Integrado de Escalas - 9ª CIPM
+                      </div>
+                      <div className="text-[8px] font-black text-pmpe-navy uppercase">
+                         {new Date().toLocaleString('pt-BR')}
+                      </div>
+                   </div>
+                </div>
+              </div>
+
+              {/* Modal Footer (Actions) */}
+              <div className="p-8 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-4 items-center justify-end">
+                <button 
+                  onClick={() => {
+                    const poly = selectedPolicemanCalendar;
+                    const ordDays = (schedules[poly.id!] || []).sort((a,b) => a-b);
+                    const extras = escalas.filter(e => e.policemenIds.includes(poly.id!))
+                      .sort((a,b) => a.date.toDate().getTime() - b.date.toDate().getTime());
+                    
+                    let text = `*ESCALA MENSAL - 9ª CIPM*\n`;
+                    text += `*PM:* ${poly.graduacaoPosto} ${poly.nomeGuerra}\n`;
+                    text += `*MÊS:* ${monthName.toUpperCase()}\n\n`;
+                    
+                    if (ordDays.length > 0) {
+                      text += `*ORDINÁRIO:* ${ordDays.join(', ')}\n`;
+                    }
+                    
+                    if (extras.length > 0) {
+                      text += `\n*EXTRAS (PJES/OPS):*\n`;
+                      extras.forEach(e => {
+                        const s = serviceTypes[e.serviceTypeId];
+                        text += `• ${format(e.date.toDate(), 'dd/MM')} - ${s?.sigla} (${s?.horarioInicio}-${s?.horarioTermino})\n`;
+                      });
+                    }
+                    
+                    text += `\n_Consulte sua escala completa no terminal de serviço._`;
+                    
+                    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                  }}
+                  className="px-6 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                >
+                  <MessageSquare className="w-4 h-4" /> Whatsapp
+                </button>
+
+                <button 
+                  onClick={async () => {
+                    const el = document.getElementById('personal-report-content');
+                    if (!el) return;
+                    const html2canvas = (await import('html2canvas')).default;
+                    const jsPDF = (await import('jspdf')).jsPDF;
+                    
+                    const canvas = await html2canvas(el, { scale: 2 });
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                    
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                    pdf.save(`Escala_${selectedPolicemanCalendar.nomeGuerra}_${monthKey}.pdf`);
+                  }}
+                  className="px-6 py-3 bg-pmpe-navy text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-pmpe-navy/20 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4 text-pmpe-gold" /> Salvar PDF
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
