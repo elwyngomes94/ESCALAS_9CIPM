@@ -30,39 +30,46 @@ async function startServer() {
         currentMonth 
       } = req.body;
 
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "Gemini API Key não configurada" });
+      }
+
       const systemInstruction = `
         Você é um Assistente de Gestão de Escalas para a Polícia Militar (9ª CIPM).
-        Sua tarefa é sugerir uma escala extra (PJES/OPS) otimizada para o mês ${currentMonth}.
+        Sua tarefa é sugerir uma escala EXTRA (PJES/OPS) otimizada para o mês ${currentMonth}.
         
-        REGRAS CRÍTICAS:
-        1. SERVIÇO ORDINÁRIO: Nunca escale um policial em um dia que ele tenha serviço ordinário (conforme ordinarySchedules).
-        2. CONFLITO DE HORÁRIO: Um policial não pode estar em dois serviços cujos horários se sobrepõem.
-        3. COTAS DO POLICIAL: Para PJES, respeite o limite de cotas do voluntário (volunteers[].cotas). Cada serviço consome service.cotasPorServico.
+        REGRAS CRÍTICAS E OBRIGATÓRIAS:
+        1. SERVIÇO ORDINÁRIO: Nunca escale um policial em um dia que ele tenha serviço ordinário (conforme ordinarySchedules). O policial não pode ter NENHUM serviço extra (PJES ou OPS) no dia de seu serviço ordinário.
+        2. CONFLITO DE HORÁRIO: Um policial não pode estar em dois serviços cujos horários se sobrepõem. Analise rigorosamente os campos horarioInicio e horarioTermino. Se um turno termina após a meia-noite (ex: 22h às 06h), ele ocupa o horário do dia seguinte também.
+        3. COTAS INDIVIDUAIS (PJES): Respeite o limite de cotas do voluntário (volunteers[].cotas). Cada serviço PJES consome a quantidade definida em "service.cotasPorServico". Se não especificado, considere 1.
         4. VAGAS DO SERVIÇO: Não exceda o número de vagas (vagasNecessarias) de cada serviço em cada dia.
-        5. ANTIGUIDADE: Em caso de disputa, prefira os policiais com menor valor de "antiguidade" (mais antigos).
-        6. COTAS DA UNIDADE: Respeite os limites mensais da unidade (quotaSettings) para MP, FORUM, ESCOLAR e DECRETO.
-        7. ATIVAÇÃO: Respeite as datas ativas de cada serviço (activeDates ou activationType: 'ALL').
-        8. PJES ÚNICO: Um policial só pode ter 1 PJES por dia.
-        9. OPS: Não tem limite de cotas do policial, mas deve respeitar o limite total da unidade.
+        5. ANTIGUIDADE: Em caso de disputa pela mesma vaga, prefira os policiais com MENOR valor numérico em "antiguidade" (ex: 1 é mais antigo que 10).
+        6. COTAS DA UNIDADE (PJES): Respeite os limites mensais da unidade (quotaSettings) para MP, FORUM, ESCOLAR e DECRETO. O somatório de todas as cotas atribuídas em cada subtipo não pode exceder o limite mensal da unidade.
+        7. ATIVAÇÃO: Apenas escale em dias que o serviço está ativo. Se activationType for 'ALL', está ativo o mês todo. Se for 'SPECIFIC', verifique 'activeDates'.
+        8. PJES ÚNICO: Um policial só pode ter 1 (UM) serviço do tipo PJES por dia.
+        9. OPS: Não tem limite de cotas individuais do policial, mas deve respeitar o cronograma e o limite total da unidade (opsTotal).
         
-        FORMATO DE SAÍDA:
-        Retorne um objeto JSON contendo um array "assignments", onde cada item tem:
-        - policemanId
-        - serviceId
-        - date (YYYY-MM-DD)
+        FORMATO DE SAÍDA EXCLUSIVAMENTE JSON:
+        {
+          "assignments": [
+            { "policemanId": "ID", "serviceId": "ID", "date": "YYYY-MM-DD" }
+          ],
+          "explanation": "Breve justificativa das escolhas"
+        }
         
-        Seja justo na distribuição e priorize preencher todas as vagas possíveis.
+        Priorize preencher as vagas dos policiais mais antigos que ainda possuem cotas disponíveis e não têm conflito.
       `;
 
       const prompt = `
-        DADOS ATUAIS:
+        DADOS PARA PROCESSAMENTO:
+        - Mês: ${currentMonth}
         - Voluntários: ${JSON.stringify(volunteers)}
         - Serviços Disponíveis: ${JSON.stringify(services)}
-        - Escalas já existentes: ${JSON.stringify(existingEscalas)}
-        - Escala Ordinária (policemanId -> dias do mês): ${JSON.stringify(ordinarySchedules)}
-        - Limites da Unidade: ${JSON.stringify(quotaSettings)}
+        - Escalas já existentes (JÁ PREENCHIDAS): ${JSON.stringify(existingEscalas)}
+        - Escala Ordinária (policemanId -> lista de dias do mês em que está de serviço): ${JSON.stringify(ordinarySchedules)}
+        - Limites de Cotas da Unidade: ${JSON.stringify(quotaSettings)}
         
-        Por favor, sugira as NOVAS escala para preencher as vagas ociosas.
+        Analise as escalas existentes e preencha as vagas OCIOSAS (vacancies) respeitando todas as regras.
       `;
 
       const response = await ai.models.generateContent({
@@ -93,10 +100,11 @@ async function startServer() {
         contents: prompt
       });
 
-      res.json(JSON.parse(response.text || '{}'));
+      const text = response.text || '{}';
+      res.json(JSON.parse(text));
     } catch (error) {
       console.error("AI Scheduling Error:", error);
-      res.status(500).json({ error: "Erro ao gerar escala com IA" });
+      res.status(500).json({ error: "Erro ao gerar escala com IA: " + (error instanceof Error ? error.message : "Desconhecido") });
     }
   });
 

@@ -57,6 +57,7 @@ import {
   FileSpreadsheet,
   GripVertical,
   Sparkles,
+  Undo2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -83,6 +84,15 @@ const CreateEscala = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [undoStack, setUndoStack] = useState<{ 
+    action: 'ASSIGN' | 'REMOVE', 
+    data: {
+      serviceId: string,
+      policemanId: string,
+      date: Date,
+      escalaId?: string
+    } 
+  }[]>([]);
   const [duplicating, setDuplicating] = useState(false);
   const [success, setSuccess] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -322,7 +332,7 @@ const CreateEscala = () => {
   }, [currentMonth, mKey]); 
 
 
-  const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }) => {
+  const handleAssignService = async (serviceId: string, customAssignInfo?: { policemanId: string, date: Date }, isUndo = false) => {
     if (submitting) return; // Prevent double clicks
     
     const assignInfo = customAssignInfo || assignmentModal;
@@ -335,76 +345,109 @@ const CreateEscala = () => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const needed = service.cotasPorServico || 1;
     
-    // 1. Time Overlap check
-    const timeToMinutes = (timeStr: string) => {
-      if (!timeStr) return 0;
-      const cleanTime = timeStr.replace(/[^\d:]/g, '');
-      const [h, m] = cleanTime.split(':').map(Number);
-      return (Number.isNaN(h) ? 0 : h) * 60 + (Number.isNaN(m) ? 0 : m);
-    };
+    // Skip validations if it's an UNDO operation (redundant but safe)
+    if (!isUndo) {
+      // 1. Time Overlap check
+      const timeToMinutes = (timeStr: string) => {
+        if (!timeStr) return 0;
+        const cleanTime = timeStr.replace(/[^\d:]/g, '');
+        const [h, m] = cleanTime.split(':').map(Number);
+        return (Number.isNaN(h) ? 0 : h) * 60 + (Number.isNaN(m) ? 0 : m);
+      };
 
-    const start1 = timeToMinutes(service.horarioInicio);
-    let end1 = timeToMinutes(service.horarioTermino);
-    if (end1 <= start1) end1 += 1440; // Turno virando o dia
+      const start1 = timeToMinutes(service.horarioInicio);
+      let end1 = timeToMinutes(service.horarioTermino);
+      if (end1 <= start1) end1 += 1440; // Turno virando o dia
 
-    // 0. Ordinary Service Conflict Check
-    const dayNum = getDate(date);
-    const isOrdinary = (ordinarySchedules[policemanId] || []).includes(dayNum);
-    if (isOrdinary) {
-      alert(`Erro: O policial já está escalado no Serviço Ordinário nesta data. Não é permitido escala extra em dias de serviço ordinário.`);
-      return;
-    }
+      // 0. Ordinary Service Conflict Check
+      const dayNum = getDate(date);
+      const isOrdinary = (ordinarySchedules[policemanId] || []).includes(dayNum);
+      if (isOrdinary) {
+        alert(`Erro: O policial já está escalado no Serviço Ordinário nesta data. Não é permitido escala extra em dias de serviço ordinário.`);
+        return;
+      }
 
-    const overlappingScale = joinedEscalas.find(e => {
-      const eDateStr = format(e.date.toDate(), 'yyyy-MM-dd');
-      if (eDateStr !== dateStr) return false;
-      if (!e.policemenIds.includes(policemanId)) return false;
+      const overlappingScale = joinedEscalas.find(e => {
+        const eDateStr = format(e.date.toDate(), 'yyyy-MM-dd');
+        if (eDateStr !== dateStr) return false;
+        if (!e.policemenIds.includes(policemanId)) return false;
+        
+        const otherS = e.service;
+        if (!otherS) return false;
+
+        const start2 = timeToMinutes(otherS.horarioInicio);
+        let end2 = timeToMinutes(otherS.horarioTermino);
+        if (end2 <= start2) end2 += 1440;
+
+        return (start1 < end2) && (end1 > start2);
+      });
+
+      if (overlappingScale) {
+         alert(`Conflito de Horário! O policial já está escalado no serviço ${overlappingScale.service?.sigla} (${overlappingScale.service?.horarioInicio}-${overlappingScale.service?.horarioTermino}) que choca com este horário.`);
+         return;
+      }
+
+      // 2. Strict Duplication Check
+      const typeBeingAssigned = service.tipo; 
+      const alreadyScaledInSameType = joinedEscalas.find(e => 
+        format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
+        e.policemenIds.includes(policemanId) &&
+        e.service?.tipo === typeBeingAssigned
+      );
+
+      if (alreadyScaledInSameType && typeBeingAssigned === 'PJES') {
+         alert(`Este policial já possui uma escala de PJES para este dia (${alreadyScaledInSameType.service?.sigla}).`);
+         return;
+      }
+
+      // 3. Quota Check for the Policeman
+      if (typeBeingAssigned !== 'OPS') {
+        const volunteer = joinedVolunteers.find(v => v.policemanId === policemanId && v.type?.toUpperCase() === typeBeingAssigned?.toUpperCase());
+        const maxAllowedQuotas = Number(volunteer?.cotas || 0);
+        
+        const currentMonthCotasUsed = joinedEscalas.filter(e => 
+          e.policemenIds.includes(policemanId) && 
+          e.service?.tipo?.toUpperCase() === typeBeingAssigned?.toUpperCase()
+        ).reduce((acc, e) => acc + Number(e.service?.cotasPorServico || 1), 0);
+
+        const neededValue = Number(needed);
+
+        if (currentMonthCotasUsed + neededValue > maxAllowedQuotas) {
+          alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar um serviço que consome ${neededValue}.`);
+          return;
+        }
+      }
+
+      const existingEscala = joinedEscalas.find(e => 
+        e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
+      );
+
+      // 4. Vacancy Check
+      const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
+      const maxSlots = service.vagasNecessarias || 0; 
+
+      if (maxSlots > 0 && currentSlotsUsed >= maxSlots) {
+        alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
+        return;
+      }
+
+      const type = service.tipo as 'PJES' | 'OPS';
       
-      const otherS = e.service;
-      if (!otherS) return false;
+      let limit = 0;
+      let used = 0;
+      if (type === 'OPS') { 
+        limit = 0; 
+      }
+      else {
+        const subtype = service.pjesSubtype;
+        if (subtype === 'MP') { limit = unitQuotas?.pjesMPTotal || 0; used = currentUsage.PJES_MP; }
+        else if (subtype === 'FORUM') { limit = unitQuotas?.pjesForumTotal || 0; used = currentUsage.PJES_FORUM; }
+        else if (subtype === 'ESCOLAR') { limit = unitQuotas?.pjesEscolarTotal || 0; used = currentUsage.PJES_ESCOLAR; }
+        else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
+      }
 
-      const start2 = timeToMinutes(otherS.horarioInicio);
-      let end2 = timeToMinutes(otherS.horarioTermino);
-      if (end2 <= start2) end2 += 1440;
-
-      return (start1 < end2) && (end1 > start2);
-    });
-
-    if (overlappingScale) {
-       alert(`Conflito de Horário! O policial já está escalado no serviço ${overlappingScale.service?.sigla} (${overlappingScale.service?.horarioInicio}-${overlappingScale.service?.horarioTermino}) que choca com este horário.`);
-       return;
-    }
-
-    // 2. Strict Duplication Check (Check same TYPE on same day - except if overlap already caught it, but we keep this to prevent dual same-type same-day even if sequential, unless user wants to allow that too?)
-    // User said: "pode ser escalado juntamente ao PJES... só não pode chocar os horários". 
-    // This implies PJES+OPS is OK. What about PJES+PJES? Usually NOT OK.
-    const typeBeingAssigned = service.tipo; // 'PJES' or 'OPS'
-    const alreadyScaledInSameType = joinedEscalas.find(e => 
-      format(e.date.toDate(), 'yyyy-MM-dd') === dateStr && 
-      e.policemenIds.includes(policemanId) &&
-      e.service?.tipo === typeBeingAssigned
-    );
-
-    if (alreadyScaledInSameType && typeBeingAssigned === 'PJES') {
-       alert(`Este policial já possui uma escala de PJES para este dia (${alreadyScaledInSameType.service?.sigla}).`);
-       return;
-    }
-
-    // 3. Quota Check for the Policeman (Volunteered Quotas) - SKIP IF OPS
-    if (typeBeingAssigned !== 'OPS') {
-      const volunteer = joinedVolunteers.find(v => v.policemanId === policemanId && v.type?.toUpperCase() === typeBeingAssigned?.toUpperCase());
-      const maxAllowedQuotas = Number(volunteer?.cotas || 0);
-      
-      // Sum of quotas already used by this policeman in this month for this service type
-      const currentMonthCotasUsed = joinedEscalas.filter(e => 
-        e.policemenIds.includes(policemanId) && 
-        e.service?.tipo?.toUpperCase() === typeBeingAssigned?.toUpperCase()
-      ).reduce((acc, e) => acc + Number(e.service?.cotasPorServico || 1), 0);
-
-      const neededValue = Number(needed);
-
-    if (currentMonthCotasUsed + neededValue > maxAllowedQuotas) {
-        alert(`Erro: O policial já atingiu ou excederá o seu limite de cotas voluntárias (${maxAllowedQuotas}). Já possui ${currentMonthCotasUsed} cotas e está tentando adicionar um serviço que consome ${neededValue}.`);
+      if (limit > 0 && used + needed > limit) {
+        alert(`Erro: Cota da UNIDADE insuficiente para ${service.sigla}.`);
         return;
       }
     }
@@ -413,41 +456,10 @@ const CreateEscala = () => {
       e.serviceTypeId === serviceId && format(e.date.toDate(), 'yyyy-MM-dd') === dateStr
     );
 
-    // 4. Vacancy Check (vagasNecessarias)
-    const currentSlotsUsed = existingEscala?.policemenIds.length || 0;
-    const maxSlots = service.vagasNecessarias || 0; 
-
-    if (maxSlots > 0 && currentSlotsUsed >= maxSlots) {
-      alert(`Erro: Todas as vagas (${maxSlots}) para o serviço ${service.sigla} nesta data já foram preenchidas.`);
-      return;
-    }
-
-    const type = service.tipo as 'PJES' | 'OPS';
-    
-    // Quota Checks - SKIP UNIT QUOTA LIMIT IF OPS
-    let limit = 0;
-    let used = 0;
-    if (type === 'OPS') { 
-      limit = 0; // No limit for OPS 
-    }
-    else {
-      const subtype = service.pjesSubtype;
-      if (subtype === 'MP') { limit = unitQuotas?.pjesMPTotal || 0; used = currentUsage.PJES_MP; }
-      else if (subtype === 'FORUM') { limit = unitQuotas?.pjesForumTotal || 0; used = currentUsage.PJES_FORUM; }
-      else if (subtype === 'ESCOLAR') { limit = unitQuotas?.pjesEscolarTotal || 0; used = currentUsage.PJES_ESCOLAR; }
-      else if (subtype === 'DECRETO') { limit = unitQuotas?.pjesDecretoTotal || 0; used = currentUsage.PJES_DECRETO; }
-    }
-
-    if (limit > 0 && used + needed > limit) {
-      alert(`Erro: Cota da UNIDADE insuficiente para ${service.sigla}.`);
-      return;
-    }
-
     setSubmitting(true);
     try {
       let finalEscalaIdValue = '';
       if (existingEscala) {
-        // Double check policemenIds to prevent race condition
         if (!existingEscala.policemenIds.includes(policemanId)) {
           await updateDoc(doc(db, 'escalas', existingEscala.id!), {
             policemenIds: [...new Set([...existingEscala.policemenIds, policemanId])],
@@ -480,12 +492,18 @@ const CreateEscala = () => {
         month: format(date, 'yyyy-MM')
       });
 
+      if (!isUndo) {
+        setUndoStack(prev => [{ 
+          action: 'ASSIGN', 
+          data: { serviceId, policemanId, date, escalaId: finalEscalaIdValue } 
+        }, ...prev.slice(0, 19)]);
+      }
+
       if (!customAssignInfo) {
          setAssignmentModal(null);
       }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
-      // No need for fetchData() as onSnapshot handles it
     } catch (err) {
       console.error("Erro ao salvar escala:", err);
     } finally {
@@ -493,13 +511,17 @@ const CreateEscala = () => {
     }
   };
 
-  const handleRemoveFromScale = async (escalaId: string, policemanId: string) => {
+  const handleRemoveFromScale = async (escalaId: string, policemanId: string, isUndo = false) => {
     if (!isAdmin) return;
     const escala = joinedEscalas.find(e => e.id === escalaId);
     if (!escala) return;
 
     setLoading(true);
     try {
+      // Keep record for undo before deleting
+      const serviceId = escala.serviceTypeId;
+      const date = escala.date.toDate();
+
       // 1. Delete associated quota logs
       const logQ = query(
         collection(db, 'quotaLogs'), 
@@ -522,11 +544,45 @@ const CreateEscala = () => {
         await deleteDoc(logDoc.ref);
       }
       
+      if (!isUndo) {
+        setUndoStack(prev => [{ 
+          action: 'REMOVE', 
+          data: { serviceId, policemanId, date, escalaId } 
+        }, ...prev.slice(0, 19)]);
+      }
+
       setAssignmentModal(null);
     } catch (err) {
       console.error("Erro ao remover da escala:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0 || submitting || loading) return;
+    
+    const lastOp = undoStack[0];
+    const rest = undoStack.slice(1);
+    
+    setUndoStack(rest);
+
+    if (lastOp.action === 'ASSIGN') {
+      // Finding the current escalaId because it might have changed if others were added/removed
+      // Actually we just call handleRemoveFromScale based on the IDs
+      const escala = joinedEscalas.find(e => 
+        e.serviceTypeId === lastOp.data.serviceId && 
+        isSameDay(e.date.toDate(), lastOp.data.date) &&
+        e.policemenIds.includes(lastOp.data.policemanId)
+      );
+      if (escala) {
+        await handleRemoveFromScale(escala.id!, lastOp.data.policemanId, true);
+      }
+    } else if (lastOp.action === 'REMOVE') {
+      await handleAssignService(lastOp.data.serviceId, { 
+        policemanId: lastOp.data.policemanId, 
+        date: lastOp.data.date 
+      }, true);
     }
   };
 
@@ -828,6 +884,20 @@ const CreateEscala = () => {
            </div>
 
            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleUndo}
+                disabled={undoStack.length === 0 || submitting || loading}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
+                  undoStack.length === 0 || submitting || loading
+                    ? "bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed" 
+                    : "bg-white text-pmpe-navy border-slate-200 hover:bg-slate-50 shadow-sm"
+                )}
+              >
+                 <Undo2 className="w-3.5 h-3.5" />
+                 Desfazer
+              </button>
+
               <button 
                 onClick={handleRemoteAISchedule}
                 disabled={aiLoading}
