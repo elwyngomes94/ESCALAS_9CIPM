@@ -825,7 +825,8 @@ const CreateEscala = () => {
                      </tr>
                   ) : filteredVolunteers.map(v => {
                     const scaledPMRecords = joinedEscalas.filter(e => e.policemenIds.includes(v.policemanId));
-                    const scaledCount = scaledPMRecords.length;
+                    const currentTabScales = scaledPMRecords.filter(e => e.service?.tipo?.toUpperCase() === activeTab);
+                    const scaledCount = currentTabScales.length;
                     const solicted = v.cotas || 0;
                     const remaining = solicted - scaledCount;
 
