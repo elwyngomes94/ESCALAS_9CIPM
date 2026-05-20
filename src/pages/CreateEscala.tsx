@@ -58,6 +58,8 @@ import {
   GripVertical,
   Sparkles,
   Undo2,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -102,6 +104,38 @@ const CreateEscala = () => {
   const [activeTab, setActiveTab] = useState<'PJES' | 'OPS'>('PJES');
   const [sortBy, setSortBy] = useState<'graduacaoPosto' | 'matricula' | 'nomeGuerra' | 'antiguidade' | 'order'>('order');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else {
+          setIsFullscreen(!isFullscreen);
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else {
+          setIsFullscreen(!isFullscreen);
+        }
+      }
+    } catch (err) {
+      console.warn('Fullscreen request failed, applying custom CSS layout fullscreen:', err);
+      setIsFullscreen(!isFullscreen);
+    }
+  };
 
   const mKey = format(currentMonth, 'yyyy-MM');
   const prevMonthKey = format(subMonths(currentMonth, 1), 'yyyy-MM');
@@ -1016,7 +1050,12 @@ const CreateEscala = () => {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-100px)] overflow-hidden font-sans bg-slate-50">
+    <div className={cn(
+      "flex flex-col font-sans bg-slate-50 transition-all duration-300",
+      isFullscreen 
+        ? "fixed inset-0 w-screen h-screen z-[9999] p-6 overflow-hidden md:p-8" 
+        : "h-[calc(100vh-100px)] overflow-hidden"
+    )}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1089,6 +1128,29 @@ const CreateEscala = () => {
            </div>
 
            <div className="flex items-center gap-2">
+              <button 
+                onClick={toggleFullscreen}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
+                  isFullscreen 
+                    ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 shadow-sm"
+                    : "bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100 shadow-sm"
+                )}
+                title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+              >
+                 {isFullscreen ? (
+                   <>
+                     <Minimize2 className="w-3.5 h-3.5" />
+                     Sair Tela
+                   </>
+                 ) : (
+                   <>
+                     <Maximize2 className="w-3.5 h-3.5" />
+                     Tela Cheia
+                   </>
+                 )}
+              </button>
+
               <button 
                 onClick={handleUndo}
                 disabled={undoStack.length === 0 || submitting || loading}
