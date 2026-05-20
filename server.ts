@@ -1,17 +1,23 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { GoogleGenAI, Type } from "@google/genai";
 
 async function startServer() {
-  const app = express();
+  const app = express(); // Just node standard express app
   const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
 
   // AI Scheduling Endpoint
   app.post("/api/ai/schedule", async (req, res) => {
@@ -60,39 +66,35 @@ async function startServer() {
         - Cotas da Unidade: ${JSON.stringify(quotaSettings)}
       `;
 
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash", 
-        systemInstruction 
-      });
-
-      const response = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          systemInstruction,
           responseMimeType: "application/json",
           responseSchema: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
               assignments: {
-                type: SchemaType.ARRAY,
+                type: Type.ARRAY,
                 items: {
-                  type: SchemaType.OBJECT,
+                  type: Type.OBJECT,
                   properties: {
-                    policemanId: { type: SchemaType.STRING },
-                    serviceId: { type: SchemaType.STRING },
-                    date: { type: SchemaType.STRING }
+                    policemanId: { type: Type.STRING },
+                    serviceId: { type: Type.STRING },
+                    date: { type: Type.STRING }
                   },
                   required: ["policemanId", "serviceId", "date"]
                 }
               },
-              explanation: { type: SchemaType.STRING }
+              explanation: { type: Type.STRING }
             },
             required: ["assignments"]
           }
         }
       });
 
-      const result = await response.response;
-      let text = result.text() || '{}';
+      let text = response.text || '{}';
       
       // Clean potential markdown blocks
       text = text.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -174,42 +176,38 @@ async function startServer() {
         Extraia todos os policiais escalados e seus respectivos dias. Retorne o resultado estritamente no esquema JSON definido.
       `;
 
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-        systemInstruction
-      });
-
-      const response = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          systemInstruction,
           responseMimeType: "application/json",
           responseSchema: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
               schedules: {
-                type: SchemaType.ARRAY,
+                type: Type.ARRAY,
                 items: {
-                  type: SchemaType.OBJECT,
+                  type: Type.OBJECT,
                   properties: {
-                    policemanId: { type: SchemaType.STRING, description: "O ID único do policial correspondente da lista oficial fornecida." },
+                    policemanId: { type: Type.STRING, description: "O ID único do policial correspondente da lista oficial fornecida." },
                     days: {
-                      type: SchemaType.ARRAY,
-                      items: { type: SchemaType.INTEGER },
+                      type: Type.ARRAY,
+                      items: { type: Type.INTEGER },
                       description: "Lista de dias do mês em que está escalado para o serviço ordinário, ex: [3, 4, 15]"
                     }
                   },
                   required: ["policemanId", "days"]
                 }
               },
-              explanation: { type: SchemaType.STRING, description: "Breve explicação das escalas encontradas ou correspondências." }
+              explanation: { type: Type.STRING, description: "Breve explicação das escalas encontradas ou correspondências." }
             },
             required: ["schedules"]
           }
         }
       });
 
-      const result = await response.response;
-      let textContent = result.text() || '{}';
+      let textContent = response.text || '{}';
       
       // Clean potential markdown blocks
       textContent = textContent.replace(/```json/g, "").replace(/```/g, "").trim();
