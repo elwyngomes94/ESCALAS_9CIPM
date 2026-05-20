@@ -28,7 +28,10 @@ import {
   MessageSquare,
   FileText,
   ShieldAlert,
-  Shield
+  Shield,
+  Sparkles,
+  UploadCloud,
+  Loader2
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDate, addMonths, subMonths, isSameDay, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -48,6 +51,17 @@ const OrdinaryService = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedPolicemanCalendar, setSelectedPolicemanCalendar] = useState<Policeman | null>(null);
+
+  // AI Parser Specific States
+  const [aiParsing, setAiParsing] = useState(false);
+  const [parsedSchedulesPreview, setParsedSchedulesPreview] = useState<{
+    policemanId: string;
+    policemanName: string;
+    matricula: string;
+    days: number[];
+  }[] | null>(null);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const monthKey = format(currentDate, 'yyyy-MM');
   const monthName = format(currentDate, 'MMMM yyyy', { locale: ptBR });
@@ -169,6 +183,103 @@ const OrdinaryService = () => {
     }
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg'];
+    if (!allowedTypes.includes(file.type)) {
+      setAiError("Por favor, selecione um arquivo válido (PDF ou imagem PNG/JPG).");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        setAiParsing(true);
+        setAiError(null);
+        setParsedSchedulesPreview(null);
+        
+        const result = reader.result as string;
+        const base64Data = result.split(',')[1];
+        
+        const simplePolicemen = policemen.map(p => ({
+          id: p.id,
+          nomeGuerra: p.nomeGuerra,
+          matricula: p.matricula,
+          graduacaoPosto: p.graduacaoPosto
+        }));
+
+        const response = await fetch('/api/ai/parse-ordinary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pdfBase64: base64Data,
+            mimeType: file.type,
+            policemenList: simplePolicemen,
+            currentMonth: monthKey
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Falha ao processar o arquivo.');
+        }
+
+        const data = await response.json();
+        if (!data.schedules || data.schedules.length === 0) {
+          setAiError("A IA não conseguiu identificar escalas no arquivo ou mapear para os policiais cadastrados.");
+          return;
+        }
+
+        const previewList = data.schedules.map((item: any) => {
+          const p = policemen.find(poly => poly.id === item.policemanId);
+          return {
+            policemanId: item.policemanId,
+            policemanName: p ? `${p.graduacaoPosto} ${p.nomeGuerra}` : "NÃO IDENTIFICADO",
+            matricula: p ? p.matricula : "",
+            days: item.days || []
+          };
+        }).filter((item: any) => item.policemanId && item.days.length > 0);
+
+        if (previewList.length === 0) {
+          setAiError("Nenhum policial cadastrado coincidiu com as escalas encontradas no arquivo.");
+        } else {
+          setParsedSchedulesPreview(previewList);
+        }
+      } catch (err: any) {
+        console.error(err);
+        setAiError(err.message || "Ocorreu um erro ao processar o arquivo.");
+      } finally {
+        setAiParsing(false);
+      }
+    };
+
+    reader.onerror = () => {
+      setAiError("Erro ao ler o arquivo selecionado.");
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  const handleApplyParsedSchedules = () => {
+    if (!parsedSchedulesPreview) return;
+    
+    setSchedules(prev => {
+      const nextSchedules = { ...prev };
+      parsedSchedulesPreview.forEach(item => {
+        nextSchedules[item.policemanId] = item.days;
+      });
+      return nextSchedules;
+    });
+
+    setParsedSchedulesPreview(null);
+    setShowAiModal(false);
+    
+    setSuccessMessage(`Escalas importadas com sucesso! Lembre-se de SALVAR ALTERAÇÕES.`);
+    setTimeout(() => setSuccessMessage(null), 5000);
+  };
+
   const filteredPolicemen = policemen.filter(p => {
     const matchesSearch = p.nomeGuerra.toLowerCase().includes(searchTerm.toLowerCase()) || p.matricula.includes(searchTerm);
     const isVolunteer = volunteers.some(v => v.policemanId === p.id);
@@ -266,6 +377,13 @@ const OrdinaryService = () => {
           />
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 bg-slate-50 border-indigo-100 text-indigo-600 hover:bg-slate-100 shadow-sm"
+          >
+            <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
+            Importar PDF
+          </button>
           <button
             onClick={() => setFilterVolunteers(!filterVolunteers)}
             className={cn(
@@ -627,6 +745,192 @@ const OrdinaryService = () => {
                 >
                   <Download className="w-4 h-4 text-pmpe-gold" /> Salvar PDF
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* AI PDF Import Modal */}
+        {showAiModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-pmpe-navy to-slate-850 text-white animate-fade-in" style={{ backgroundColor: '#002147' }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-lg font-black text-pmpe-gold">
+                    <Sparkles className="w-5 h-5 text-pmpe-gold" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white">Importador Inteligente IA</h3>
+                    <p className="text-[9px] uppercase tracking-wider font-semibold text-slate-300 mt-0.5">Preencher Escala Ordinária Automática (PDF/Imagem)</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowAiModal(false);
+                    setParsedSchedulesPreview(null);
+                    setAiError(null);
+                  }}
+                  className="p-2 hover:bg-white/10 rounded-lg text-white transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {!parsedSchedulesPreview && !aiParsing && (
+                  <div className="space-y-4">
+                    <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex gap-3 text-indigo-900">
+                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-indigo-505" />
+                      <div className="text-[10px] uppercase font-bold leading-relaxed space-y-1">
+                        <p className="font-extrabold tracking-wide">Como funciona?</p>
+                        <p className="text-slate-650 font-normal normal-case font-bold">Arraste e solte o PDF oficial da escala ordinária deste mês. Nossa Inteligência Artificial (Gemini) fará a leitura de OCR, mapeará os nomes/matrículas automaticamente para os policiais cadastrados no sistema e identificará cada dia em que estão escalados.</p>
+                      </div>
+                    </div>
+
+                    <div 
+                      onClick={() => document.getElementById('ai-file-input')?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          const fileInput = document.getElementById('ai-file-input') as HTMLInputElement;
+                          if (fileInput) {
+                            const container = new DataTransfer();
+                            container.items.add(file);
+                            fileInput.files = container.files;
+                            const event = new Event('change', { bubbles: true });
+                            fileInput.dispatchEvent(event);
+                          }
+                        }
+                      }}
+                      className="border-2 border-dashed border-slate-200 hover:border-pmpe-navy/30 hover:bg-slate-50/50 rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all bg-slate-50 group"
+                    >
+                      <UploadCloud className="w-12 h-12 text-slate-400 group-hover:text-pmpe-navy/60 transition-colors mb-3" />
+                      <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest text-center">Arraste o PDF ou clique para selecionar</p>
+                      <p className="text-[9px] text-slate-400 uppercase tracking-wider mt-1 text-center font-bold">Suporta arquivos PDF ou imagens escaneadas (PNG, JPG)</p>
+                      <input 
+                        id="ai-file-input" 
+                        type="file" 
+                        accept="application/pdf,image/png,image/jpeg" 
+                        className="hidden" 
+                        onChange={handleFileChange} 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {aiParsing && (
+                  <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="relative flex items-center justify-center">
+                      <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+                      <Sparkles className="w-5 h-5 text-pmpe-gold absolute animate-pulse" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-700">Fazendo Leitura Inteligente do Documento...</p>
+                      <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold mt-1">Isso pode levar alguns segundos enquanto o modelo OCR analisa tabelas e datas.</p>
+                    </div>
+                  </div>
+                )}
+
+                {aiError && (
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-800">
+                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider">Falha na extração de dados</p>
+                      <p className="text-xs text-red-600/90 mt-1">{aiError}</p>
+                      <button 
+                        onClick={() => {
+                          setAiError(null);
+                          setParsedSchedulesPreview(null);
+                        }}
+                        className="text-[9px] font-black uppercase tracking-widest text-red-700 hover:underline mt-2 flex items-center gap-1"
+                      >
+                        Tentar analisar outro arquivo
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {parsedSchedulesPreview && parsedSchedulesPreview.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex gap-3 text-emerald-900">
+                      <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
+                      <div>
+                        <p className="text-[10px] uppercase font-black tracking-wide">Sucesso! Leitura concluída.</p>
+                        <p className="text-slate-600 font-normal text-[10.5px] leading-relaxed">A IA conseguiu identificar escalas para <strong className="text-emerald-800 font-extrabold">{parsedSchedulesPreview.length} policiais</strong>. Verifique abaixo as escalas reconhecidas antes de aplicá-las ao calendário.</p>
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-100 rounded-2xl overflow-hidden max-h-[320px] overflow-y-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 text-[9px] font-black uppercase text-slate-500 border-b border-slate-100">
+                            <th className="p-3 pl-4">Policial</th>
+                            <th className="p-3">Matrícula</th>
+                            <th className="p-3 text-center">Dias Escalados</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-[10px] font-black text-slate-700">
+                          {parsedSchedulesPreview.map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <td className="p-3 pl-4 text-pmpe-navy truncate uppercase max-w-[170px]">{item.policemanName}</td>
+                              <td className="p-3 text-slate-400 font-mono font-bold">{item.matricula || '-'}</td>
+                              <td className="p-3 text-center">
+                                <div className="flex flex-wrap gap-1 justify-center">
+                                  {item.days.map(d => (
+                                    <span key={d} className="bg-pmpe-red/10 text-pmpe-red rounded px-2 py-0.5 text-[9px] font-extrabold">{d}</span>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3">
+                <button 
+                  onClick={() => {
+                    setShowAiModal(false);
+                    setParsedSchedulesPreview(null);
+                    setAiError(null);
+                  }}
+                  className="px-5 py-2.5 bg-slate-100 text-slate-600 font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-200 transition-all border border-slate-200"
+                >
+                  Cancelar
+                </button>
+
+                {parsedSchedulesPreview && (
+                  <>
+                    <button 
+                      onClick={() => {
+                        setParsedSchedulesPreview(null);
+                        setAiError(null);
+                      }}
+                      className="px-5 py-2.5 bg-white text-indigo-600 border border-indigo-150 font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-50 transition-all shadow-sm"
+                    >
+                      Analisar Outro
+                    </button>
+                    <button 
+                      onClick={handleApplyParsedSchedules}
+                      className="px-6 py-2.5 bg-pmpe-navy text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all shadow-lg flex items-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-pmpe-gold" /> Aplicar no Calendário
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>

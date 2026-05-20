@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 async function startServer() {
   const app = express();
@@ -109,6 +110,105 @@ async function startServer() {
       console.error("[AI] General Error:", error);
       const errorMessage = error?.message || "Erro desconhecido na API do Gemini";
       res.status(500).json({ error: `IA Indisponível: ${errorMessage}` });
+    }
+  });
+
+  // AI Ordinary Schedule Parser Endpoint
+  app.post("/api/ai/parse-ordinary", async (req, res) => {
+    try {
+      const { pdfBase64, mimeType = "application/pdf", policemenList, currentMonth } = req.body;
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "Chave da API Gemini não configurada no ambiente." });
+      }
+
+      if (!pdfBase64) {
+        return res.status(400).json({ error: "Conteúdo do arquivo não fornecido." });
+      }
+
+      if (!policemenList || !Array.isArray(policemenList) || policemenList.length === 0) {
+        return res.status(400).json({ error: "Lista de policiais vazia ou inválida." });
+      }
+
+      console.log(`[AI] Parsing ordinary schedule PDF/Image for month: ${currentMonth}. Total matching candidates: ${policemenList.length}`);
+
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const systemInstruction = `
+        Você é um Assistente especializado em extração de dados estruturados e OCR para a 9ª CIPM.
+        Sua tarefa é analisar o documento em anexo (uma escala ordinária de plantão militar para o mês ${currentMonth}) e identificar os policiais que estão escalados para serviço ordinário em cada dia do mês.
+
+        Use esta lista oficial de policiais cadastrados no banco de dados para fazer o mapeamento dos nomes de guerra e matrículas encontrados no documento para os respectivos ID's de policial corretos:
+        ${JSON.stringify(policemenList)}
+
+        REGRAS IMPORTANTES PARA MAPEAMENTO:
+        1. Ignore abreviações e patentes, tais como "SD PM", "CB PM", "3º SGT PM", "PM", "SD", "CB", "SGT" etc.
+        2. Use tanto o nome de guerra quanto a matrícula como chaves de conferência.
+        3. Faça correspondência aproximada (fuzzy matching). Por exemplo: "CB GOMES" ou "SD PM LUIZ GOMES" deve mapear para o policial de nome de guerra "GOMES" ou cujo nome completo contenha "Luiz Gomes".
+        4. No documento, busque por tabelas, cronogramas, calendários ou listas de serviço ordinário. Para cada policial mapeado com sucesso, extraia os dias do mês (apenas os números, por exemplo, se ele trabalha nos dias 5, 10 e 15, extraia [5, 10, 15]) em que ele está escalado. Se o policial trabalha em um dia, esse número inteiro de 1 a 31 deve estar no array 'days'.
+        5. Se não conseguir identificar um policial no documento, simplesmente não o inclua na lista retornada. Do mesmo modo, se um policial não tiver dias de serviço ordinário escalados, não o inclua.
+      `;
+
+      const prompt = `
+        Analise a escala ordinária anexa para o mês ${currentMonth}.
+        Escreva o resultado no formato JSON esperado, mapeando com precisão os dias de serviço ordinário ao ID de cada policial da lista fornecida.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: [
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: pdfBase64
+            }
+          },
+          {
+            text: prompt
+          }
+        ],
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              schedules: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    policemanId: { type: Type.STRING, description: "O ID único do policial correspondente da lista oficial fornecida." },
+                    days: {
+                      type: Type.ARRAY,
+                      items: { type: Type.INTEGER },
+                      description: "Lista de dias do mês em que está escalado para o serviço ordinário, ex: [3, 4, 15]"
+                    }
+                  },
+                  required: ["policemanId", "days"]
+                }
+              },
+              explanation: { type: Type.STRING, description: "Breve explicação das escalas encontradas ou correspondências." }
+            },
+            required: ["schedules"]
+          }
+        }
+      });
+
+      const text = response.text || "{}";
+      const parsed = JSON.parse(text);
+      res.json(parsed);
+
+    } catch (error: any) {
+      console.error("[AI Parse Ordinary] Error:", error);
+      res.status(500).json({ error: `Erro ao processar arquivo: ${error?.message || error}` });
     }
   });
 
