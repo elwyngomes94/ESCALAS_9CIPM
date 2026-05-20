@@ -54,6 +54,7 @@ const OrdinaryService = () => {
 
   // AI Parser Specific States
   const [aiParsing, setAiParsing] = useState(false);
+  const [inputText, setInputText] = useState("");
   const [parsedSchedulesPreview, setParsedSchedulesPreview] = useState<{
     policemanId: string;
     policemanName: string;
@@ -183,94 +184,77 @@ const OrdinaryService = () => {
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg'];
-    if (!allowedTypes.includes(file.type)) {
-      setAiError("Por favor, selecione um arquivo válido (PDF ou imagem PNG/JPG).");
+  const handleParseText = async () => {
+    if (!inputText || !inputText.trim()) {
+      setAiError("Por favor, cole o texto da escala ordinária para ser interpretado.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        setAiParsing(true);
-        setAiError(null);
-        setParsedSchedulesPreview(null);
-        
-        const result = reader.result as string;
-        const base64Data = result.split(',')[1];
-        
-        const simplePolicemen = policemen.map(p => ({
-          id: p.id,
-          nomeGuerra: p.nomeGuerra,
-          matricula: p.matricula,
-          graduacaoPosto: p.graduacaoPosto
-        }));
+    try {
+      setAiParsing(true);
+      setAiError(null);
+      setParsedSchedulesPreview(null);
+      
+      const simplePolicemen = policemen.map(p => ({
+        id: p.id,
+        nomeGuerra: p.nomeGuerra,
+        matricula: p.matricula,
+        graduacaoPosto: p.graduacaoPosto
+      }));
 
-        const response = await fetch('/api/ai/parse-ordinary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pdfBase64: base64Data,
-            mimeType: file.type,
-            policemenList: simplePolicemen,
-            currentMonth: monthKey
-          })
-        });
+      const response = await fetch('/api/ai/parse-ordinary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          textToParse: inputText,
+          policemenList: simplePolicemen,
+          currentMonth: monthKey
+        })
+      });
 
-        if (!response.ok) {
-          let errMsg = 'Falha ao processar o arquivo.';
+      if (!response.ok) {
+        let errMsg = 'Falha ao processar a escala.';
+        try {
+          const errorText = await response.text();
           try {
-            const errorText = await response.text();
-            try {
-              const errorData = JSON.parse(errorText);
-              errMsg = errorData.error || errMsg;
-            } catch {
-              errMsg = errorText.substring(0, 200) || errMsg;
-            }
+            const errorData = JSON.parse(errorText);
+            errMsg = errorData.error || errMsg;
           } catch {
-            // ignore
+            errMsg = errorText.substring(0, 200) || errMsg;
           }
-          throw new Error(errMsg);
+        } catch {
+          // ignore
         }
-
-        const data = await response.json();
-        if (!data.schedules || data.schedules.length === 0) {
-          setAiError("A IA não conseguiu identificar escalas no arquivo ou mapear para os policiais cadastrados.");
-          return;
-        }
-
-        const previewList = data.schedules.map((item: any) => {
-          const p = policemen.find(poly => poly.id === item.policemanId);
-          return {
-            policemanId: item.policemanId,
-            policemanName: p ? `${p.graduacaoPosto} ${p.nomeGuerra}` : "NÃO IDENTIFICADO",
-            matricula: p ? p.matricula : "",
-            days: item.days || []
-          };
-        }).filter((item: any) => item.policemanId && item.days.length > 0);
-
-        if (previewList.length === 0) {
-          setAiError("Nenhum policial cadastrado coincidiu com as escalas encontradas no arquivo.");
-        } else {
-          setParsedSchedulesPreview(previewList);
-        }
-      } catch (err: any) {
-        console.error(err);
-        setAiError(err.message || "Ocorreu um erro ao processar o arquivo.");
-      } finally {
-        setAiParsing(false);
+        throw new Error(errMsg);
       }
-    };
 
-    reader.onerror = () => {
-      setAiError("Erro ao ler o arquivo selecionado.");
-    };
+      const data = await response.json();
+      if (!data.schedules || data.schedules.length === 0) {
+        setAiError("A IA não conseguiu identificar escalas vinculadas a nenhum policial cadastrado.");
+        return;
+      }
 
-    reader.readAsDataURL(file);
+      const previewList = data.schedules.map((item: any) => {
+        const p = policemen.find(poly => poly.id === item.policemanId);
+        return {
+          policemanId: item.policemanId,
+          policemanName: p ? `${p.graduacaoPosto} ${p.nomeGuerra}` : "NÃO IDENTIFICADO",
+          matricula: p ? p.matricula : "",
+          days: item.days || []
+        };
+      }).filter((item: any) => item.policemanId && item.days.length > 0);
+
+      if (previewList.length === 0) {
+        setAiError("Nenhum policial do sistema coincidiu com o texto fornecido.");
+      } else {
+        setParsedSchedulesPreview(previewList);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAiError(err.message || "Ocorreu um erro ao processar o texto.");
+    } finally {
+      setAiParsing(false);
+    }
   };
 
   const handleApplyParsedSchedules = () => {
@@ -389,11 +373,16 @@ const OrdinaryService = () => {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAiModal(true)}
+            onClick={() => {
+              setShowAiModal(true);
+              setInputText("");
+              setParsedSchedulesPreview(null);
+              setAiError(null);
+            }}
             className="px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all flex items-center gap-2 bg-slate-50 border-indigo-100 text-indigo-600 hover:bg-slate-100 shadow-sm"
           >
             <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
-            Importar PDF
+            Importar Escala (Texto)
           </button>
           <button
             onClick={() => setFilterVolunteers(!filterVolunteers)}
@@ -774,11 +763,11 @@ const OrdinaryService = () => {
               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-pmpe-navy to-slate-850 text-white animate-fade-in" style={{ backgroundColor: '#002147' }}>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-lg font-black text-pmpe-gold">
-                    <Sparkles className="w-5 h-5 text-pmpe-gold" />
+                    <Sparkles className="w-5 h-5 text-pmpe-gold animate-bounce" />
                   </div>
                   <div>
                     <h3 className="text-sm font-black uppercase tracking-widest text-white">Importador Inteligente IA</h3>
-                    <p className="text-[9px] uppercase tracking-wider font-semibold text-slate-300 mt-0.5">Preencher Escala Ordinária Automática (PDF/Imagem)</p>
+                    <p className="text-[9px] uppercase tracking-wider font-semibold text-slate-300 mt-0.5">Preencher Escala Ordinária Automática (Texto Copiado)</p>
                   </div>
                 </div>
                 <button 
@@ -786,6 +775,7 @@ const OrdinaryService = () => {
                     setShowAiModal(false);
                     setParsedSchedulesPreview(null);
                     setAiError(null);
+                    setInputText("");
                   }}
                   className="p-2 hover:bg-white/10 rounded-lg text-white transition-all"
                 >
@@ -798,42 +788,37 @@ const OrdinaryService = () => {
                 {!parsedSchedulesPreview && !aiParsing && (
                   <div className="space-y-4">
                     <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex gap-3 text-indigo-900">
-                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-indigo-505" />
+                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-indigo-500" />
                       <div className="text-[10px] uppercase font-bold leading-relaxed space-y-1">
-                        <p className="font-extrabold tracking-wide">Como funciona?</p>
-                        <p className="text-slate-650 font-normal normal-case font-bold">Arraste e solte o PDF oficial da escala ordinária deste mês. Nossa Inteligência Artificial (Gemini) fará a leitura de OCR, mapeará os nomes/matrículas automaticamente para os policiais cadastrados no sistema e identificará cada dia em que estão escalados.</p>
+                        <p className="font-extrabold tracking-wide text-indigo-950">Como usar?</p>
+                        <p className="text-slate-650 font-normal normal-case font-bold">
+                          Abra o arquivo PDF ou documento oficial da escala ordinária, selecione e copie todo o texto (escala dos pelotões, motoristas, etc.) e cole no campo de texto abaixo. 
+                          A nossa inteligência artificial analisará o texto, identificará as linhas de serviço e preencherá automaticamente os dias do calendário para os policiais correspondentes.
+                        </p>
                       </div>
                     </div>
 
-                    <div 
-                      onClick={() => document.getElementById('ai-file-input')?.click()}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) {
-                          const fileInput = document.getElementById('ai-file-input') as HTMLInputElement;
-                          if (fileInput) {
-                            const container = new DataTransfer();
-                            container.items.add(file);
-                            fileInput.files = container.files;
-                            const event = new Event('change', { bubbles: true });
-                            fileInput.dispatchEvent(event);
-                          }
-                        }
-                      }}
-                      className="border-2 border-dashed border-slate-200 hover:border-pmpe-navy/30 hover:bg-slate-50/50 rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all bg-slate-50 group"
-                    >
-                      <UploadCloud className="w-12 h-12 text-slate-400 group-hover:text-pmpe-navy/60 transition-colors mb-3" />
-                      <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest text-center">Arraste o PDF ou clique para selecionar</p>
-                      <p className="text-[9px] text-slate-400 uppercase tracking-wider mt-1 text-center font-bold">Suporta arquivos PDF ou imagens escaneadas (PNG, JPG)</p>
-                      <input 
-                        id="ai-file-input" 
-                        type="file" 
-                        accept="application/pdf,image/png,image/jpeg" 
-                        className="hidden" 
-                        onChange={handleFileChange} 
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Cole o texto da escala aqui</label>
+                      <textarea
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        placeholder={`Cole o texto copiado aqui... Exemplo:
+3º SGT - 107970-0 - JEFFERSON     4, 8, 12, 16, 20, 24, 28
+2º SGT - 107051-7 - KLEBER        3, 7, 11, 15, 19, 23, 27, 31
+GT 01 - ERONILDO / RICARTE        1, 5, 9, 13, 17, 21, 25, 29`}
+                        rows={8}
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-bold font-mono text-slate-700 focus:bg-white focus:ring-2 focus:ring-pmpe-navy outline-none transition-all shadow-inner resize-none"
                       />
+                      <div className="flex justify-end pt-2">
+                        <button
+                          onClick={handleParseText}
+                          disabled={aiParsing || !inputText.trim()}
+                          className="px-6 py-2.5 bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all shadow-md hover:shadow-indigo-500/10 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Sparkles className="w-4 h-4 text-pmpe-gold animate-pulse" /> Analisar Texto da Escala
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -845,8 +830,8 @@ const OrdinaryService = () => {
                       <Sparkles className="w-5 h-5 text-pmpe-gold absolute animate-pulse" />
                     </div>
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-700">Fazendo Leitura Inteligente do Documento...</p>
-                      <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold mt-1">Isso pode levar alguns segundos enquanto o modelo OCR analisa tabelas e datas.</p>
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-700">Fazendo Leitura e Interpretação do Texto...</p>
+                      <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold mt-1">Isso pode levar alguns segundos enquanto o modelo do Gemini analisa os dados e as matrículas.</p>
                     </div>
                   </div>
                 )}
@@ -861,10 +846,11 @@ const OrdinaryService = () => {
                         onClick={() => {
                           setAiError(null);
                           setParsedSchedulesPreview(null);
+                          setInputText("");
                         }}
                         className="text-[9px] font-black uppercase tracking-widest text-red-700 hover:underline mt-2 flex items-center gap-1"
                       >
-                        Tentar analisar outro arquivo
+                        Limpar texto e tentar novamente
                       </button>
                     </div>
                   </div>
@@ -876,7 +862,7 @@ const OrdinaryService = () => {
                       <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
                       <div>
                         <p className="text-[10px] uppercase font-black tracking-wide">Sucesso! Leitura concluída.</p>
-                        <p className="text-slate-600 font-normal text-[10.5px] leading-relaxed">A IA conseguiu identificar escalas para <strong className="text-emerald-800 font-extrabold">{parsedSchedulesPreview.length} policiais</strong>. Verifique abaixo as escalas reconhecidas antes de aplicá-las ao calendário.</p>
+                        <p className="text-slate-600 font-normal text-[10.5px] leading-relaxed">A IA conseguiu identificar escalas para <strong className="text-emerald-800 font-extrabold">{parsedSchedulesPreview.length} policiais</strong>. Verifique abaixo as escalas reconhecidas antes de aplicá-las ao calendário deste mês.</p>
                       </div>
                     </div>
 
@@ -917,6 +903,7 @@ const OrdinaryService = () => {
                     setShowAiModal(false);
                     setParsedSchedulesPreview(null);
                     setAiError(null);
+                    setInputText("");
                   }}
                   className="px-5 py-2.5 bg-slate-100 text-slate-600 font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-200 transition-all border border-slate-200"
                 >
@@ -929,10 +916,11 @@ const OrdinaryService = () => {
                       onClick={() => {
                         setParsedSchedulesPreview(null);
                         setAiError(null);
+                        setInputText("");
                       }}
                       className="px-5 py-2.5 bg-white text-indigo-600 border border-indigo-150 font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-50 transition-all shadow-sm"
                     >
-                      Analisar Outro
+                      Copiar Outro Texto
                     </button>
                     <button 
                       onClick={handleApplyParsedSchedules}
