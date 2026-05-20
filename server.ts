@@ -142,18 +142,35 @@ async function startServer() {
       });
 
       const systemInstruction = `
-        Você é um Assistente especializado em extração de dados estruturados e OCR para a 9ª CIPM.
+        Você é um Assistente especializado em extração de dados estruturados e OCR para a 9ª CIPM (Polícia Militar de Pernambuco).
         Sua tarefa é analisar o documento em anexo (uma escala ordinária de plantão militar para o mês ${currentMonth}) e identificar os policiais que estão escalados para serviço ordinário em cada dia do mês.
 
         Use esta lista oficial de policiais cadastrados no banco de dados para fazer o mapeamento dos nomes de guerra e matrículas encontrados no documento para os respectivos ID's de policial corretos:
         ${JSON.stringify(policemenList)}
 
-        REGRAS IMPORTANTES PARA MAPEAMENTO:
-        1. Ignore abreviações e patentes, tais como "SD PM", "CB PM", "3º SGT PM", "PM", "SD", "CB", "SGT" etc.
-        2. Use tanto o nome de guerra quanto a matrícula como chaves de conferência.
-        3. Faça correspondência aproximada (fuzzy matching). Por exemplo: "CB GOMES" ou "SD PM LUIZ GOMES" deve mapear para o policial de nome de guerra "GOMES" ou cujo nome completo contenha "Luiz Gomes".
-        4. No documento, busque por tabelas, cronogramas, calendários ou listas de serviço ordinário. Para cada policial mapeado com sucesso, extraia os dias do mês (apenas os números, por exemplo, se ele trabalha nos dias 5, 10 e 15, extraia [5, 10, 15]) em que ele está escalado. Se o policial trabalha em um dia, esse número inteiro de 1 a 31 deve estar no array 'days'.
-        5. Se não conseguir identificar um policial no documento, simplesmente não o inclua na lista retornada. Do mesmo modo, se um policial não tiver dias de serviço ordinário escalados, não o inclua.
+        REGRAS IMPORTANTES PARA EXTRAÇÃO E MAPEAMENTO:
+        1. FORMATO DO EFETIVO: 
+           - O documento possui colunas denominadas "EFETIVO" e "DIAS".
+           - O campo "EFETIVO" geralmente contém a graduação (ex: 3º SGT, CB PM, SD PM, etc.), a MATRÍCULA (ex: 107970-0, 117745-1, etc.) e o NOME DE GUERRA (ex: JEFFERSON, LOURENÇO, CLERIVALDO).
+           - Exemplo: "3º SGT - 107970-0 - JEFFERSON", "SD PM – 125425-1 – FRANCINETE", "CB PM - 120591-9 - FRANCISCO (Mot)".
+        
+        2. CHAVE DE CORRESPONDÊNCIA (MATRÍCULA):
+           - A matrícula é o identificador mais confiável para cada militar.
+           - Para cada militar encontrado na imagem, extraia a matrícula. Remova todos os caracteres não-numéricos (traços, barras, espaços, pontos) tanto da matrícula obtida no documento quanto da lista oficial de policiais para encontrar uma correspondência exata.
+           - Se a matrícula coincidir (mesmo sem o dígito verificador ou com diferencas de formatação/traços), associe ao ID desse policial.
+        
+        3. CHAVE SECUNDÁRIA (NOME DE GUERRA):
+           - Caso a matrícula não esteja legível ou ausente, faça uma correspondência inteligente pelo Nome de Guerra (fuzzy match). 
+           - Remova termos adicionais entre parênteses como "(Cmt)", "(Mot)", "(Pat)", "(Cmt/Mot)", "a contar do dia..." etc.
+           - Ignore patentes/postos ("PM", "SD", "CB", "1º SGT", "2º SGT", "3º SGT", "3ª SGT", "CAP", "TEN").
+        
+        4. EXTRAÇÃO DOS DIAS:
+           - Sob a coluna "DIAS", serão listados os dias do mês em que aquele policial está escalado.
+           - Extraia todos os números inteiros válidos de 1 a 31 que representem os dias.
+           - Exemplo de texto: "4, 8, 12, 16, 20, 24, 28" deve ser extraído como o array [4, 8, 12, 16, 20, 24, 28].
+           - Se houver intervalos ou outros formatos, separe corretamente em dias individuais (ex: "5, 6, 7" -> [5, 6, 7]).
+        
+        5. Se um policial não tiver nenhuma escala ativa ou não for encontrado nenhuma associação confiável, não o inclua no JSON de retorno.
       `;
 
       const prompt = `
