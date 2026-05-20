@@ -1104,40 +1104,6 @@ const CreateEscala = () => {
               </button>
 
               <button 
-                onClick={handleIntelligentDistribution}
-                disabled={aiLoading || loading || submitting}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border relative overflow-hidden",
-                  aiLoading || loading || submitting 
-                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
-                    : "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 shadow-sm"
-                )}
-              >
-                 {aiLoading && aiProgress && (
-                   <div 
-                     className="absolute bottom-0 left-0 h-1 bg-blue-400 transition-all duration-300" 
-                     style={{ width: `${(aiProgress.current / aiProgress.total) * 100}%` }}
-                   />
-                 )}
-                 <Sparkles className={cn("w-3.5 h-3.5", aiLoading && "animate-pulse")} />
-                 {aiLoading ? (aiProgress ? `Distribuindo ${aiProgress.current}/${aiProgress.total}` : 'Iniciando...') : 'Distribuição Inteligente'}
-              </button>
-
-              <button 
-                onClick={handleRemoteAISchedule}
-                disabled={aiLoading || loading || submitting}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border relative overflow-hidden",
-                  aiLoading || loading || submitting 
-                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
-                    : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 shadow-sm"
-                )}
-              >
-                 <Sparkles className={cn("w-3.5 h-3.5", aiLoading && "animate-pulse")} />
-                 Escalar com IA
-              </button>
-
-              <button 
                 onClick={handleDuplicateLastMonth}
                 disabled={duplicating}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all border border-slate-200"
