@@ -8,7 +8,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
@@ -180,17 +181,19 @@ async function startServer() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
-        contents: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: pdfBase64
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: pdfBase64
+              }
+            },
+            {
+              text: prompt
             }
-          },
-          {
-            text: prompt
-          }
-        ],
+          ]
+        },
         config: {
           systemInstruction,
           responseMimeType: "application/json",
@@ -243,6 +246,14 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Global error handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("[Global Error Handler]:", err);
+    res.status(err.status || err.statusCode || 500).json({ 
+      error: `Erro no servidor: ${err.message || err}` 
+    });
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

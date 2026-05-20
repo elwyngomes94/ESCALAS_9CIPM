@@ -222,8 +222,19 @@ const OrdinaryService = () => {
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Falha ao processar o arquivo.');
+          let errMsg = 'Falha ao processar o arquivo.';
+          try {
+            const errorText = await response.text();
+            try {
+              const errorData = JSON.parse(errorText);
+              errMsg = errorData.error || errMsg;
+            } catch {
+              errMsg = errorText.substring(0, 200) || errMsg;
+            }
+          } catch {
+            // ignore
+          }
+          throw new Error(errMsg);
         }
 
         const data = await response.json();
