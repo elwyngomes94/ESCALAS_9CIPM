@@ -24,6 +24,6 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src"],
+  "include": ["src", "api", "server.ts"],
   "exclude": ["node_modules"]
 }
