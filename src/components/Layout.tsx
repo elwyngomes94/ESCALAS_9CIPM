@@ -55,22 +55,39 @@ const Layout = () => {
   // Permite acesso mesmo sem usuário logado
   const displayEmail = profile?.email || 'Visitante';
 
-  const navigation = [
-    { to: "/", icon: LayoutDashboard, label: "Painel de Comando" },
-    { to: "/escalas", icon: ClipboardList, label: "Visualizar Escalas" },
+  const menuGroups = [
+    {
+      title: "Painel e Visualização",
+      items: [
+        { to: "/", icon: LayoutDashboard, label: "Painel de Comando" },
+        { to: "/escalas", icon: ClipboardList, label: "Visualizar Escalas" }
+      ]
+    },
+    ...(isAdmin ? [
+      {
+        title: "Efetivo",
+        items: [
+          { to: "/peculio", icon: Users, label: "Efetivo (Pecúlio)" },
+          { to: "/escala-ordinaria", icon: Calendar, label: "Escala Ordinária" }
+        ]
+      },
+      {
+        title: "Planejamento e Escalas",
+        items: [
+          { to: "/criar-escala", icon: Shield, label: "Gestão de Escalas" },
+          { to: "/servicos", icon: Briefcase, label: "Tipos de Serviço" },
+          { to: "/cotas", icon: Shield, label: "Controle de Cotas" }
+        ]
+      },
+      {
+        title: "Voluntariado",
+        items: [
+          { to: "/voluntarios-pjes", icon: UserPlus, label: "Voluntários PJES" },
+          { to: "/voluntarios-ops", icon: UserPlus, label: "Voluntários OPS" }
+        ]
+      }
+    ] : [])
   ];
-
-  if (isAdmin) {
-    navigation.push(
-      { to: "/peculio", icon: Users, label: "Efetivo (Pecúlio)" },
-      { to: "/escala-ordinaria", icon: Calendar, label: "Escala Ordinária" },
-      { to: "/servicos", icon: Briefcase, label: "Tipos de Serviço" },
-      { to: "/cotas", icon: Shield, label: "Controle de Cotas" },
-      { to: "/voluntarios-pjes", icon: UserPlus, label: "Voluntários PJES" },
-      { to: "/voluntarios-ops", icon: UserPlus, label: "Voluntários OPS" },
-      { to: "/criar-escala", icon: Shield, label: "Gestão de Escalas" }
-    );
-  }
 
   return (
     <div className="h-screen flex overflow-hidden bg-slate-50 font-sans">
@@ -120,14 +137,23 @@ const Layout = () => {
           </div>
         </div>
 
-        <nav className="flex-1 py-6 overflow-y-auto relative z-10 custom-matrix-scroll">
-          {navigation.map((item) => (
-            <SidebarItem
-              key={item.to}
-              {...item}
-              active={location.pathname === item.to}
-              onClick={() => setIsSidebarOpen(false)}
-            />
+        <nav className="flex-1 py-6 overflow-y-auto relative z-10 custom-matrix-scroll space-y-6">
+          {menuGroups.map((group, gIdx) => (
+            <div key={gIdx} className="space-y-1">
+              <span className="block px-8 pt-2 pb-1 text-[8px] font-black uppercase tracking-[0.25em] text-white/30 truncate">
+                {group.title}
+              </span>
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <SidebarItem
+                    key={item.to}
+                    {...item}
+                    active={location.pathname === item.to}
+                    onClick={() => setIsSidebarOpen(false)}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
@@ -167,7 +193,7 @@ const Layout = () => {
             <div className="hidden lg:flex flex-col">
                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Localização Atual</h2>
                <h3 className="text-sm font-black text-pmpe-navy uppercase tracking-tighter">
-                 {navigation.find(n => n.to === location.pathname)?.label || 'Gestão Operacional'}
+                 {menuGroups.flatMap(g => g.items).find(n => n.to === location.pathname)?.label || 'Gestão Operacional'}
                </h3>
             </div>
           </div>
