@@ -133,15 +133,6 @@ async function startServer() {
 
       console.log(`[AI] Parsing ordinary schedule text for month: ${currentMonth}. Total matching candidates: ${policemenList.length}`);
 
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-
       const systemInstruction = `
         Você é um Assistente especializado em extração de dados estruturados para a 9ª CIPM (Polícia Militar de Pernambuco).
         Sua tarefa é analisar o texto de uma escala de serviço ordinária para o mês ${currentMonth} (frequentemente copiado de um documento oficial/PDF) e identificar os policiais que estão escalados para serviço ordinário em cada dia do mês.
@@ -183,39 +174,46 @@ async function startServer() {
         Extraia todos os policiais escalados e seus respectivos dias. Retorne o resultado estritamente no esquema JSON definido.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          systemInstruction,
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        systemInstruction
+      });
+
+      const response = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
               schedules: {
-                type: Type.ARRAY,
+                type: SchemaType.ARRAY,
                 items: {
-                  type: Type.OBJECT,
+                  type: SchemaType.OBJECT,
                   properties: {
-                    policemanId: { type: Type.STRING, description: "O ID único do policial correspondente da lista oficial fornecida." },
+                    policemanId: { type: SchemaType.STRING, description: "O ID único do policial correspondente da lista oficial fornecida." },
                     days: {
-                      type: Type.ARRAY,
-                      items: { type: Type.INTEGER },
+                      type: SchemaType.ARRAY,
+                      items: { type: SchemaType.INTEGER },
                       description: "Lista de dias do mês em que está escalado para o serviço ordinário, ex: [3, 4, 15]"
                     }
                   },
                   required: ["policemanId", "days"]
                 }
               },
-              explanation: { type: Type.STRING, description: "Breve explicação das escalas encontradas ou correspondências." }
+              explanation: { type: SchemaType.STRING, description: "Breve explicação das escalas encontradas ou correspondências." }
             },
             required: ["schedules"]
           }
         }
       });
 
-      const text = response.text || "{}";
-      const parsed = JSON.parse(text);
+      const result = await response.response;
+      let textContent = result.text() || '{}';
+      
+      // Clean potential markdown blocks
+      textContent = textContent.replace(/```json/g, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(textContent);
       res.json(parsed);
 
     } catch (error: any) {
